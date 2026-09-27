@@ -1,12 +1,12 @@
 # WorkforceGuard AI
 
 Agent-based anomaly detection for attendance, access, and payroll data (ERP HR domain).
-Synthetic data only. Plan: `docs/PLAN.md` (sliced). Slice docs: `docs/slices/`.
+Synthetic data only. Plan: `docs/PLAN.md` (sliced). Slice docs: `.temp/slices/` (git-ignored, local only).
 
 ## Save tokens
 
 - Read ONLY your slice section of `docs/PLAN.md` (Grep `### Slice N `, Read with offset/limit). Never the whole plan.
-- This file holds all the rules you need. Do not read `docs/slices/` or other plan sections unless blocked.
+- This file holds all the rules you need. Do not read `.temp/` or other plan sections unless blocked.
 - Use Grep/Glob to find code; read only the files you change or call.
 - Load the matching project skill instead of re-deriving conventions:
   - `slice-build` — any slice work (start here)
@@ -65,4 +65,5 @@ Before saying a task is done: run `make fmt`, then `make lint` and `make test`. 
 
 ## Every slice ends with
 
-A doc at `docs/slices/slice-NN-<name>.md` in the format from the `slice-build` skill, plus one appended row in `docs/slices/README.md`.
+A doc at `.temp/slices/slice-NN-<name>.md` in the format from the `slice-build` skill, plus one appended row in `.temp/slices/README.md`.
+Any other notes or scratch markdown also go in `.temp/`. Never commit `.temp/`.

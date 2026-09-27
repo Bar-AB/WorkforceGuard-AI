@@ -1,0 +1,59 @@
+# Local notes (slice docs, scratch) — never committed
+.temp/
+
+# Claude Code / tooling local state
+.claude/settings.local.json
+.claude/*.lock
+.cc10x/
+graphify-out/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+*.tsbuildinfo
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Infra
+infra/tofu/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+.localstack/
+volumes/
+
+# Evals output (baselines.json stays tracked)
+evals/runs/
+evals/report.md
+
+# Logs
+*.log
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

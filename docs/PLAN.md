@@ -107,7 +107,7 @@ Rules for every slice:
 - Follow `CLAUDE.md` code rules and the `slice-build` project skill.
 - Before done: `make fmt` (ruff format . + ruff check --fix . + frontend format), then `make lint` and `make test` pass.
 - Every slice has tests for each "Done when" item.
-- Every slice ends with `docs/slices/slice-NN-<name>.md` (format in the `slice-build` skill) + a row in `docs/slices/README.md`.
+- Every slice ends with `.temp/slices/slice-NN-<name>.md` (format in the `slice-build` skill) + a row in `.temp/slices/README.md`. `.temp/` is git-ignored.
 - Agents read only their slice section + `CLAUDE.md`, never this whole file.
 - Run each with: `/cc10x:cc10x-router build slice N from docs/PLAN.md — use the slice-build skill`
 

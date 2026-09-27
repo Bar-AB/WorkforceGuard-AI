@@ -9,7 +9,7 @@ description: Use when building, continuing, or reviewing any slice from docs/PLA
 - `CLAUDE.md` (already loaded) = the rules.
 - Your slice section of `docs/PLAN.md`: `Grep "### Slice N " docs/PLAN.md -n`, then Read with offset/limit
   up to the next `### Slice`. Never read the whole plan.
-- Do NOT read `docs/slices/README.md`, other slice docs, or the rest of the plan unless the slice text names
+- Do NOT read anything in `.temp/`, or the rest of the plan unless the slice text names
   something you cannot find with Grep in the code. Then read only that one section/doc.
 - Load other project skills only if the slice needs them: `python-backend`, `testing`, `llm-agents`, `frontend`.
 
@@ -29,7 +29,8 @@ make eval    # only if slice touches rules, LLM, RAG, chat, or security
 Every "Done when" item is proven by a test or command output.
 
 ## 5. Write the slice doc (no need to read any template)
-Create `docs/slices/slice-NN-<kebab-name>.md` (NN zero-padded) with exactly these sections:
+`.temp/` is git-ignored and local only. Never `git add` it.
+Create `.temp/slices/slice-NN-<kebab-name>.md` (NN zero-padded) with exactly these sections:
 
 ```
 # Slice NN — <Name>
@@ -47,7 +48,9 @@ Create `docs/slices/slice-NN-<kebab-name>.md` (NN zero-padded) with exactly thes
 
 Then append one row to the log without reading it:
 ```
-echo "| NN | [slice-NN-<name>](slice-NN-<name>.md) | <one-line summary> |" >> docs/slices/README.md
+mkdir -p .temp/slices
+[ -f .temp/slices/README.md ] || printf '# Slice log\n\n| Slice | Doc | Summary |\n| --- | --- | --- |\n' > .temp/slices/README.md
+echo "| NN | [slice-NN-<name>](slice-NN-<name>.md) | <one-line summary> |" >> .temp/slices/README.md
 ```
 
 ## 6. Report to the user
