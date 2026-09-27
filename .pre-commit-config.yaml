@@ -1,0 +1,15 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.9
+    hooks:
+      - id: ruff-format
+      - id: ruff-check
+        args: [--fix]
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier
+        language: system
+        entry: npx --prefix frontend prettier --write --ignore-unknown --config frontend/.prettierrc.json --ignore-path frontend/.prettierignore
+        files: ^frontend/
+        types: [text]

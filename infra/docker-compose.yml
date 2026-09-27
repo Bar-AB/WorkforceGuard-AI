@@ -1,0 +1,22 @@
+name: workforceguard
+
+services:
+  postgres:
+    # pgvector image = Postgres 16 plus the vector extension needed for RAG later.
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-workforceguard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-workforceguard}
+      POSTGRES_DB: ${POSTGRES_DB:-workforceguard}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  postgres-data:
