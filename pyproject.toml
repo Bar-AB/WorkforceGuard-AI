@@ -1,0 +1,52 @@
+[project]
+name = "workforceguard-ai"
+version = "0.1.0"
+description = "Agent-based anomaly detection for attendance, access, and payroll data."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.115",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.27",
+    "mypy>=1.13",
+    "pre-commit>=4.0",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.12",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["frontend"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "PL", "RUF"]
+extend-select = ["PLC0415"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "mcp_server"]
+
+[tool.ruff.lint.per-file-ignores]
+"backend/tests/**" = ["PLR2004"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "backend"
+explicit_package_bases = true
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["backend", "."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-q"

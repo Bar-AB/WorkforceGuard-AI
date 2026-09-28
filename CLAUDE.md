@@ -48,6 +48,8 @@ Before saying a task is done: run `make fmt`, then `make lint` and `make test`. 
 - All imports at the top of the file. No imports inside functions. Order: stdlib, third-party, local (ruff `I` handles it).
 - Full type hints. `mypy --strict` clean. No `Any` unless unavoidable, with a comment why.
 - Small functions, one job each. Names say what, not how. No dead code, no commented-out code.
+- Clean up as you go: when a change makes code, comments, config, dependencies, or files unused or stale,
+  delete them in the same change. Check with Grep that nothing still references them first.
 - Comments only for *why*, never for *what*.
 - No bare `except`. Never swallow errors. Raise domain errors; map them to HTTP in the API layer only.
 - Config from env via `pydantic-settings`. No secrets in code or git.
