@@ -1,12 +1,15 @@
 COMPOSE := docker compose -f infra/docker-compose.yml --env-file $(if $(wildcard .env),.env,.env.example)
 
-.PHONY: up down fmt lint lint-backend lint-frontend test test-backend test-frontend eval
+.PHONY: up down migrate fmt lint lint-backend lint-frontend test test-backend test-frontend eval
 
 up:
 	$(COMPOSE) up -d --wait
 
 down:
 	$(COMPOSE) down
+
+migrate:
+	uv run alembic upgrade head
 
 fmt:
 	uv run ruff format .

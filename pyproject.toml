@@ -4,7 +4,11 @@ version = "0.1.0"
 description = "Agent-based anomaly detection for attendance, access, and payroll data."
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "alembic>=1.14",
+    "asyncpg>=0.30",
     "fastapi>=0.115",
+    "pydantic-settings>=2.6",
+    "sqlalchemy[asyncio]>=2.0",
 ]
 
 [dependency-groups]
@@ -43,6 +47,7 @@ python_version = "3.12"
 strict = true
 mypy_path = "backend"
 explicit_package_bases = true
+plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]
