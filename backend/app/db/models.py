@@ -122,6 +122,7 @@ class AttendanceEvent(_TenantRow, Base):
     event_type: Mapped[str] = mapped_column(Text)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     source: Mapped[str] = mapped_column(Text, server_default=text("'terminal'"))
+    device_id: Mapped[str | None] = mapped_column(Text)
     note: Mapped[str | None] = mapped_column(Text)
 
 

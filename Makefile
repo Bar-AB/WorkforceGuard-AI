@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f infra/docker-compose.yml --env-file $(if $(wildcard .env),.env,.env.example)
 
-.PHONY: up down migrate fmt lint lint-backend lint-frontend test test-backend test-frontend eval
+.PHONY: up down migrate seed fmt lint lint-backend lint-frontend test test-backend test-frontend eval
 
 up:
 	$(COMPOSE) up -d --wait
@@ -10,6 +10,11 @@ down:
 
 migrate:
 	uv run alembic upgrade head
+
+SEED ?= 42
+
+seed: migrate
+	PYTHONPATH=backend uv run python -m app.seed --seed $(SEED)
 
 fmt:
 	uv run ruff format .
