@@ -35,6 +35,7 @@ docs/         PLAN.md, slices/, adr/
 
 ```
 make up          # start Postgres (and profiles as needed)
+make seed        # load the synthetic demo companies (SEED=42; same seed = same rows)
 make fmt         # ruff format . && ruff check --fix . && (cd frontend && npm run format)
 make lint        # ruff format --check . && ruff check . && mypy backend mcp_server && (cd frontend && npm run lint)
 make test        # pytest && (cd frontend && npm test)
