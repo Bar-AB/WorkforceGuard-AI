@@ -8,6 +8,22 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: workforceguard
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: workforceguard
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U workforceguard"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgresql+asyncpg://workforceguard:ci-only@localhost:5432/workforceguard
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
