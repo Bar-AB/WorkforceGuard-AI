@@ -26,7 +26,7 @@ lint: lint-backend lint-frontend
 lint-backend:
 	uv run ruff format --check .
 	uv run ruff check .
-	uv run mypy backend mcp_server
+	uv run mypy backend mcp_server evals
 
 lint-frontend:
 	cd frontend && npm run lint
@@ -40,4 +40,4 @@ test-frontend:
 	cd frontend && npm test
 
 eval:
-	@echo "No evals yet (stub until slice 3)."
+	PYTHONPATH=backend uv run python -m evals.run_rules
