@@ -37,9 +37,9 @@ docs/         PLAN.md, slices/, adr/
 make up          # start Postgres (and profiles as needed)
 make seed        # load the synthetic demo companies (SEED=42; same seed = same rows)
 make fmt         # ruff format . && ruff check --fix . && (cd frontend && npm run format)
-make lint        # ruff format --check . && ruff check . && mypy backend mcp_server && (cd frontend && npm run lint)
+make lint        # ruff format --check . && ruff check . && mypy backend mcp_server evals && (cd frontend && npm run lint)
 make test        # pytest && (cd frontend && npm test)
-make eval        # eval gate
+make eval        # rule F1/recall vs evals/baselines.json (run make seed first)
 ```
 
 Before saying a task is done: run `make fmt`, then `make lint` and `make test`. All must pass. Paste the real result.

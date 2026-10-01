@@ -32,6 +32,13 @@ jobs:
       - run: uv sync --locked
       - run: make lint-backend
       - run: make test-backend
+      - run: make seed
+      - name: Eval gate (rule F1 vs evals/baselines.json)
+        run: |
+          status=0
+          make eval || status=$?
+          cat evals/report.md >> "$GITHUB_STEP_SUMMARY"
+          exit $status
 
   frontend:
     runs-on: ubuntu-latest

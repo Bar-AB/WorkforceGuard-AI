@@ -1,0 +1,8 @@
+{
+  "rules": {
+    "overtime_breach": {
+      "f1": 1.0,
+      "recall": 0.95
+    }
+  }
+}
