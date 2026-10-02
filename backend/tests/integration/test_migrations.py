@@ -96,6 +96,17 @@ async def test_models_match_migrations_with_no_drift(migrated_engine: AsyncEngin
     assert diff == []
 
 
+def _findings_index_columns(sync_conn: Connection) -> list[list[str | None]]:
+    return [index["column_names"] for index in inspect(sync_conn).get_indexes("findings")]
+
+
+async def test_findings_newest_first_listing_has_index(migrated_engine: AsyncEngine) -> None:
+    async with migrated_engine.connect() as conn:
+        indexed = await conn.run_sync(_findings_index_columns)
+
+    assert ["company_id", "detected_at", "id"] in indexed
+
+
 async def test_check_constraints_in_db_match_models(migrated_engine: AsyncEngine) -> None:
     async with migrated_engine.connect() as conn:
         db_checks = await conn.run_sync(_db_check_constraints)

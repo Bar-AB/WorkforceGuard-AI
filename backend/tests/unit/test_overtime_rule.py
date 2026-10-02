@@ -42,6 +42,7 @@ def test_check_overtime_day_over_daily_limit_returns_daily_finding() -> None:
             rule_version="1",
             employee_id=EMPLOYEE,
             occurred_on=date(2026, 1, 6),
+            variant="daily",
             severity="high",
             summary="Worked 12.50 h, daily limit 12 h.",
             evidence={
@@ -88,6 +89,13 @@ def test_check_overtime_long_day_that_crosses_week_limit_returns_both_findings()
     findings = check_overtime([_day("13.00", week_to_date="60.00")], [ISRAEL])
 
     assert [f.evidence["limit"] for f in findings] == ["daily", "weekly"]
+
+
+def test_check_overtime_daily_and_weekly_finding_same_day_have_distinct_dedup_keys() -> None:
+    daily, weekly = check_overtime([_day("13.00", week_to_date="60.00")], [ISRAEL])
+
+    assert daily.dedup_key == f"overtime_breach:{EMPLOYEE}:2026-01-06:daily"
+    assert weekly.dedup_key == f"overtime_breach:{EMPLOYEE}:2026-01-06:weekly"
 
 
 def test_check_overtime_uses_policy_in_effect_on_the_work_date() -> None:

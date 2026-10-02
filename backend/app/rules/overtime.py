@@ -6,13 +6,14 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
+from app.errors import ConflictError
 from app.rules.findings import RuleFinding
 
 RULE_ID = "overtime_breach"
 RULE_VERSION = "1"
 
 
-class MissingOvertimePolicyError(LookupError):
+class MissingOvertimePolicyError(ConflictError):
     """No overtime policy covers a worked day, so its hours cannot be judged."""
 
 
@@ -69,6 +70,7 @@ def _daily_finding(day: WorkedDay, limits: OvertimeLimits) -> RuleFinding:
     max_hours = _plain(limits.max_daily_hours)
     return _finding(
         day,
+        variant="daily",
         severity="high",
         summary=f"Worked {day.hours} h, daily limit {max_hours} h.",
         evidence={"limit": "daily", "hours": str(day.hours), "max_hours": max_hours},
@@ -79,6 +81,7 @@ def _weekly_finding(day: WorkedDay, limits: OvertimeLimits) -> RuleFinding:
     hours, max_hours = str(day.week_hours_to_date), _plain(limits.max_weekly_hours)
     return _finding(
         day,
+        variant="weekly",
         severity="medium",
         summary=f"Worked {hours} h this week, weekly limit {max_hours} h.",
         evidence={"limit": "weekly", "hours": hours, "max_hours": max_hours},
@@ -86,13 +89,14 @@ def _weekly_finding(day: WorkedDay, limits: OvertimeLimits) -> RuleFinding:
 
 
 def _finding(
-    day: WorkedDay, *, severity: str, summary: str, evidence: dict[str, str]
+    day: WorkedDay, *, variant: str, severity: str, summary: str, evidence: dict[str, str]
 ) -> RuleFinding:
     return RuleFinding(
         rule_id=RULE_ID,
         rule_version=RULE_VERSION,
         employee_id=day.employee_id,
         occurred_on=day.work_date,
+        variant=variant,
         severity=severity,
         summary=summary,
         evidence={

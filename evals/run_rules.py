@@ -7,7 +7,7 @@ import asyncio
 import json
 import sys
 import uuid
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -18,9 +18,7 @@ from sqlalchemy.pool import NullPool
 
 from app.config import Settings
 from app.db.models import AnomalyLabel, Company
-from app.db.worked_time import load_overtime_limits, load_worked_days
-from app.rules import overtime
-from app.rules.findings import RuleFinding
+from app.services.scans import RULES
 
 EVALS_DIR = Path(__file__).resolve().parent
 BASELINES_PATH = EVALS_DIR / "baselines.json"
@@ -30,16 +28,6 @@ REPORT_PATH = EVALS_DIR / "report.md"
 Key = tuple[uuid.UUID, uuid.UUID, date]
 # rule id -> metric name -> minimum allowed score
 Baselines = dict[str, dict[str, float]]
-RuleRunner = Callable[[AsyncConnection, uuid.UUID], Awaitable[list[RuleFinding]]]
-
-
-async def _run_overtime(conn: AsyncConnection, company_id: uuid.UUID) -> list[RuleFinding]:
-    days = await load_worked_days(conn, company_id)
-    return overtime.check_overtime(days, await load_overtime_limits(conn, company_id))
-
-
-# Rule ids match the anomaly_labels.anomaly_type they are scored against.
-RULES: dict[str, RuleRunner] = {overtime.RULE_ID: _run_overtime}
 
 
 @dataclass(frozen=True)
@@ -88,11 +76,11 @@ async def _labels(conn: AsyncConnection, company_id: uuid.UUID, rule_id: str) ->
 
 async def evaluate(conn: AsyncConnection, company_ids: Sequence[uuid.UUID]) -> dict[str, Score]:
     scores: dict[str, Score] = {}
-    for rule_id, run in RULES.items():
+    for rule_id, rule in RULES.items():
         predicted: set[Key] = set()
         expected: set[Key] = set()
         for company_id in company_ids:
-            findings = await run(conn, company_id)
+            findings = await rule.run(conn, company_id)
             predicted |= {(company_id, f.employee_id, f.occurred_on) for f in findings}
             expected |= await _labels(conn, company_id, rule_id)
         scores[rule_id] = score(predicted, expected)

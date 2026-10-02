@@ -229,3 +229,20 @@ async def test_role_has_no_login_superuser_or_rls_bypass(
     )
 
     assert result.scalar_one() is False
+
+
+async def test_mcp_reader_insert_open_finding_with_dedup_key_is_allowed(
+    rollback_conn: AsyncConnection,
+) -> None:
+    company_id = await insert_company(rollback_conn)
+    employee_id = await insert_employee(rollback_conn, company_id)
+    await rollback_conn.execute(text("SET LOCAL ROLE mcp_reader"))
+
+    await rollback_conn.execute(
+        text(
+            "INSERT INTO findings (company_id, employee_id, rule_id, rule_version, severity, "
+            "summary, occurred_on, dedup_key) "
+            "VALUES (:c, :e, 'overtime', 'v1', 'high', 's', '2026-01-06', 'k')"
+        ),
+        {"c": company_id, "e": employee_id},
+    )
