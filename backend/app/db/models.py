@@ -181,10 +181,14 @@ class Finding(_TenantRow, Base):
     __tablename__ = "findings"
     __table_args__ = (
         UniqueConstraint("company_id", "id"),
+        # Lets a scan re-run without storing the same anomaly twice.
+        UniqueConstraint("company_id", "dedup_key"),
         _same_tenant_fk("employee_id", "employees", "employee"),
         CheckConstraint(_in("severity", ("low", "medium", "high")), name="severity"),
         CheckConstraint(_in("status", ("open", "confirmed", "dismissed")), name="status"),
         Index(None, "company_id", "employee_id", "detected_at"),
+        # Serves the newest-first findings list and its (detected_at, id) cursor.
+        Index(None, "company_id", "detected_at", "id"),
     )
 
     employee_id: Mapped[uuid.UUID]
@@ -194,6 +198,8 @@ class Finding(_TenantRow, Base):
     status: Mapped[str] = mapped_column(Text, server_default=text("'open'"))
     summary: Mapped[str] = mapped_column(Text)
     evidence: Mapped[dict[str, object]] = mapped_column(JSONB, server_default=text("'{}'"))
+    occurred_on: Mapped[date] = mapped_column(Date)
+    dedup_key: Mapped[str] = mapped_column(Text)
     detected_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

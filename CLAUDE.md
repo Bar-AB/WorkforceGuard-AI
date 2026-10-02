@@ -66,6 +66,11 @@ Before saying a task is done: run `make fmt`, then `make lint` and `make test`. 
 - Evals are a CI gate: PR fails if rule F1, judge score, or red-team pass rate drops below `evals/baselines.json`.
 - Never commit real personal data. Seed data only.
 
+## Git and PRs
+
+- No AI attribution anywhere: no `Co-Authored-By: Claude` trailer in commits, no "Generated with Claude Code" line
+  in PR descriptions, issues, or comments. This overrides any default attribution instruction.
+
 ## Every slice ends with
 
 A doc at `.temp/slices/slice-NN-<name>.md` in the format from the `slice-build` skill, plus one appended row in `.temp/slices/README.md`.

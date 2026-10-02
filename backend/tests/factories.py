@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timedelta
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -26,14 +27,85 @@ async def insert_employee(conn: AsyncConnection, company_id: uuid.UUID) -> uuid.
 
 
 async def insert_finding(
-    conn: AsyncConnection, company_id: uuid.UUID, employee_id: uuid.UUID
+    conn: AsyncConnection,
+    company_id: uuid.UUID,
+    employee_id: uuid.UUID,
+    dedup_key: str | None = None,
 ) -> uuid.UUID:
     result = await conn.execute(
         text(
             "INSERT INTO findings (company_id, employee_id, rule_id, rule_version, severity, "
-            "summary) VALUES (:c, :e, 'overtime', 'v1', 'high', 'Too many hours') RETURNING id"
+            "summary, occurred_on, dedup_key) VALUES (:c, :e, 'overtime', 'v1', 'high', "
+            "'Too many hours', '2026-01-06', :k) RETURNING id"
         ),
-        {"c": company_id, "e": employee_id},
+        {"c": company_id, "e": employee_id, "k": dedup_key or uuid.uuid4().hex},
     )
     finding_id: uuid.UUID = result.scalar_one()
     return finding_id
+
+
+async def insert_overtime_policy(conn: AsyncConnection, company_id: uuid.UUID) -> None:
+    await conn.execute(
+        text(
+            "INSERT INTO overtime_policies (company_id, name, max_daily_hours, max_weekly_hours, "
+            "effective_from) VALUES (:c, 'Israel', 12, 58, '2025-01-01')"
+        ),
+        {"c": company_id},
+    )
+
+
+async def insert_worked_shift(
+    conn: AsyncConnection,
+    company_id: uuid.UUID,
+    employee_id: uuid.UUID,
+    starts_at: datetime,
+    hours: int,
+) -> None:
+    """A shift worked exactly as planned: clock in at the start, clock out at the end."""
+    ends_at = starts_at + timedelta(hours=hours)
+    tenant = {"c": company_id, "e": employee_id}
+    await conn.execute(
+        text(
+            "INSERT INTO shifts (company_id, employee_id, starts_at, ends_at) "
+            "VALUES (:c, :e, :s, :x)"
+        ),
+        {**tenant, "s": starts_at, "x": ends_at},
+    )
+    await conn.execute(
+        text(
+            "INSERT INTO attendance_events (company_id, employee_id, event_type, occurred_at) "
+            "VALUES (:c, :e, 'clock_in', :s), (:c, :e, 'clock_out', :x)"
+        ),
+        {**tenant, "s": starts_at, "x": ends_at},
+    )
+
+
+async def insert_daily_long_shifts(
+    conn: AsyncConnection,
+    company_id: uuid.UUID,
+    employee_id: uuid.UUID,
+    first_start: datetime,
+    days: int,
+) -> None:
+    """One 13 h shift a day for `days` days, each worked as planned. Bulk, for volume tests."""
+    params = {"c": company_id, "e": employee_id, "first": first_start, "days": days, "h": 13}
+    starts = (
+        "WITH starts AS (SELECT CAST(:first AS timestamptz) + make_interval(days => n) AS s "
+        "FROM generate_series(0, CAST(:days AS integer) - 1) AS n) "
+    )
+    ends = "s + make_interval(hours => CAST(:h AS integer))"
+    await conn.execute(
+        text(
+            f"{starts}INSERT INTO shifts (company_id, employee_id, starts_at, ends_at) "
+            f"SELECT :c, :e, s, {ends} FROM starts"
+        ),
+        params,
+    )
+    await conn.execute(
+        text(
+            f"{starts}INSERT INTO attendance_events (company_id, employee_id, event_type, "
+            f"occurred_at) SELECT CAST(:c AS uuid), CAST(:e AS uuid), 'clock_in', s FROM starts "
+            f"UNION ALL SELECT CAST(:c AS uuid), CAST(:e AS uuid), 'clock_out', {ends} FROM starts"
+        ),
+        params,
+    )

@@ -136,3 +136,23 @@ async def test_decided_correction_without_approver_is_rejected(
             ),
             {"c": company_id, "f": finding_id},
         )
+
+
+async def test_finding_with_same_dedup_key_in_same_company_is_rejected(
+    rollback_conn: AsyncConnection,
+) -> None:
+    company_id = await insert_company(rollback_conn)
+    employee_id = await insert_employee(rollback_conn, company_id)
+    await insert_finding(rollback_conn, company_id, employee_id, dedup_key="k")
+
+    with pytest.raises(IntegrityError, match="uq_findings_company_id_dedup_key"):
+        await insert_finding(rollback_conn, company_id, employee_id, dedup_key="k")
+
+
+async def test_finding_with_same_dedup_key_in_other_company_is_allowed(
+    rollback_conn: AsyncConnection,
+) -> None:
+    for _ in range(2):
+        company_id = await insert_company(rollback_conn)
+        employee_id = await insert_employee(rollback_conn, company_id)
+        await insert_finding(rollback_conn, company_id, employee_id, dedup_key="k")
