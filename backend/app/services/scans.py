@@ -5,16 +5,17 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 
 from pydantic import BaseModel
-from sqlalchemy import insert, select
+from sqlalchemy import insert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from app.db.models import AuditLog, Company, Finding
+from app.db.models import AuditLog, Finding
 from app.db.worked_time import load_overtime_limits, load_worked_days
-from app.errors import ConflictError, NotFoundError
+from app.errors import ConflictError
 from app.rules import overtime
 from app.rules.findings import RuleFinding
 from app.security.tenant import TenantContext
+from app.services import companies
 
 RuleRunner = Callable[[AsyncConnection, uuid.UUID], Awaitable[list[RuleFinding]]]
 
@@ -49,7 +50,7 @@ class ScanResult(BaseModel):
 
 async def run_scan(conn: AsyncConnection, tenant: TenantContext) -> ScanResult:
     """Safe to re-run: a finding already stored is skipped, not duplicated."""
-    await _require_company(conn, tenant.company_id)
+    await companies.require_company(conn, tenant)
     scan_id = uuid.uuid4()
     detected, skipped = await _run_rules(conn, tenant.company_id)
     created = await _store_new_findings(conn, tenant.company_id, detected)
@@ -75,12 +76,6 @@ async def _run_rules(
         except ConflictError as error:
             skipped.append(SkippedRule(rule_id=rule_id, reason=str(error)))
     return detected, skipped
-
-
-async def _require_company(conn: AsyncConnection, company_id: uuid.UUID) -> None:
-    found = await conn.scalar(select(Company.id).where(Company.id == company_id))
-    if found is None:
-        raise NotFoundError(f"Company {company_id} not found.")
 
 
 async def _store_new_findings(

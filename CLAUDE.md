@@ -40,6 +40,9 @@ make fmt         # ruff format . && ruff check --fix . && (cd frontend && npm ru
 make lint        # ruff format --check . && ruff check . && mypy backend mcp_server evals && (cd frontend && npm run lint)
 make test        # pytest && (cd frontend && npm test)
 make eval        # rule F1/recall vs evals/baselines.json (run make seed first)
+make mcp-user    # set the mcp_server DB password from .env.mcp MCP_DATABASE_URL (after make seed)
+make mcp         # run the MCP server over stdio (reads only .env.mcp: MCP_DATABASE_URL + MCP_COMPANY_ID)
+make mcp-inspect # MCP Inspector CLI: list the tools (needs npx + seeded DB)
 ```
 
 Before saying a task is done: run `make fmt`, then `make lint` and `make test`. All must pass. Paste the real result.
@@ -47,11 +50,13 @@ Before saying a task is done: run `make fmt`, then `make lint` and `make test`. 
 ## Code rules
 
 - All imports at the top of the file. No imports inside functions. Order: stdlib, third-party, local (ruff `I` handles it).
-- Full type hints. `mypy --strict` clean. No `Any` unless unavoidable, with a comment why.
+- Full type hints. `mypy --strict` clean. No `Any` unless unavoidable; say why in the slice review artifact.
 - Small functions, one job each. Names say what, not how. No dead code, no commented-out code.
 - Clean up as you go: when a change makes code, comments, config, dependencies, or files unused or stale,
   delete them in the same change. Check with Grep that nothing still references them first.
-- Comments only for *why*, never for *what*.
+- No code comments or docstrings. Names and small functions say *what*; the *why* goes in the slice
+  review artifact. Exceptions: MCP tool docstrings (the AI reads them as tool descriptions) and
+  `# noqa` / `# type: ignore` markers.
 - No bare `except`. Never swallow errors. Raise domain errors; map them to HTTP in the API layer only.
 - Config from env via `pydantic-settings`. No secrets in code or git.
 - Tests for every change (TDD: failing test first). Every bug fix gets a regression test.
@@ -75,3 +80,10 @@ Before saying a task is done: run `make fmt`, then `make lint` and `make test`. 
 
 A doc at `.temp/slices/slice-NN-<name>.md` in the format from the `slice-build` skill, plus one appended row in `.temp/slices/README.md`.
 Any other notes or scratch markdown also go in `.temp/`. Never commit `.temp/`.
+
+Plus a review artifact (Claude Artifact, published with the Artifact tool), so the slice is easy to review:
+in Hebrew (right-to-left; code, paths and commands stay in English); plain, simple language; what the slice does and why; a short flow diagram; the safety rules and where they live;
+a brief explanation of each crucial file (skip `__init__`, toml, lock files, tests); how it was proven
+(test/eval numbers); how to try it; what is left for later; and a "why it is built this way" section
+for every non-obvious choice in the code (the reasons that would otherwise be comments). Give the user the link.
+When follow-up work changes the slice, update the same artifact (same URL) instead of making a new one.

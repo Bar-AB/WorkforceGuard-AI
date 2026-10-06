@@ -43,3 +43,15 @@ async def get_employee(
     if row is None:
         raise NotFoundError(f"Employee {employee_id} not found.")
     return EmployeeDetail.model_validate(row)
+
+
+async def require_employee(
+    conn: AsyncConnection, tenant: TenantContext, employee_id: uuid.UUID
+) -> None:
+    found = await conn.scalar(
+        select(Employee.id).where(
+            Employee.company_id == tenant.company_id, Employee.id == employee_id
+        )
+    )
+    if found is None:
+        raise NotFoundError(f"Employee {employee_id} not found.")

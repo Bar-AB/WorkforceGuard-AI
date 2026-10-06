@@ -30,6 +30,11 @@ NAMING_CONVENTION = {
 Hours = Numeric(6, 2)
 Money = Numeric(12, 2)
 
+ATTENDANCE_EVENT_TYPES = ("clock_in", "clock_out")
+ATTENDANCE_SOURCES = ("terminal", "mobile", "manual")
+ACCESS_DIRECTIONS = ("in", "out")
+ONE_OF = "one_of"
+
 
 def _in(column: str, values: tuple[str, ...]) -> str:
     quoted = ", ".join(f"'{value}'" for value in values)
@@ -113,15 +118,17 @@ class AttendanceEvent(_TenantRow, Base):
     __tablename__ = "attendance_events"
     __table_args__ = (
         _same_tenant_fk("employee_id", "employees", "employee"),
-        CheckConstraint(_in("event_type", ("clock_in", "clock_out")), name="event_type"),
-        CheckConstraint(_in("source", ("terminal", "mobile", "manual")), name="source"),
+        CheckConstraint(_in("event_type", ATTENDANCE_EVENT_TYPES), name="event_type"),
+        CheckConstraint(_in("source", ATTENDANCE_SOURCES), name="source"),
         Index(None, "company_id", "employee_id", "occurred_at"),
     )
 
     employee_id: Mapped[uuid.UUID]
-    event_type: Mapped[str] = mapped_column(Text)
+    event_type: Mapped[str] = mapped_column(Text, info={ONE_OF: ATTENDANCE_EVENT_TYPES})
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    source: Mapped[str] = mapped_column(Text, server_default=text("'terminal'"))
+    source: Mapped[str] = mapped_column(
+        Text, server_default=text("'terminal'"), info={ONE_OF: ATTENDANCE_SOURCES}
+    )
     device_id: Mapped[str | None] = mapped_column(Text)
     note: Mapped[str | None] = mapped_column(Text)
 
@@ -130,13 +137,13 @@ class AccessLog(_TenantRow, Base):
     __tablename__ = "access_logs"
     __table_args__ = (
         _same_tenant_fk("employee_id", "employees", "employee"),
-        CheckConstraint(_in("direction", ("in", "out")), name="direction"),
+        CheckConstraint(_in("direction", ACCESS_DIRECTIONS), name="direction"),
         Index(None, "company_id", "employee_id", "occurred_at"),
     )
 
     employee_id: Mapped[uuid.UUID]
     door: Mapped[str] = mapped_column(Text)
-    direction: Mapped[str] = mapped_column(Text)
+    direction: Mapped[str] = mapped_column(Text, info={ONE_OF: ACCESS_DIRECTIONS})
     granted: Mapped[bool]
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 

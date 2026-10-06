@@ -24,6 +24,7 @@ jobs:
           --health-retries 30
     env:
       DATABASE_URL: postgresql+asyncpg://workforceguard:ci-only@localhost:5432/workforceguard
+      MCP_DATABASE_URL: postgresql+asyncpg://mcp_server:ci-only-mcp-password@localhost:5432/workforceguard
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -33,6 +34,7 @@ jobs:
       - run: make lint-backend
       - run: make test-backend
       - run: make seed
+      - run: make mcp-user
       - name: Eval gate (rule F1 vs evals/baselines.json)
         run: |
           status=0
