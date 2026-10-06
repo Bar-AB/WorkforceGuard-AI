@@ -1,5 +1,6 @@
 import uuid
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
+from decimal import Decimal
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -108,4 +109,87 @@ async def insert_daily_long_shifts(
             f"UNION ALL SELECT CAST(:c AS uuid), CAST(:e AS uuid), 'clock_out', {ends} FROM starts"
         ),
         params,
+    )
+
+
+async def _insert_returning_id(
+    conn: AsyncConnection, statement: str, params: dict[str, object]
+) -> uuid.UUID:
+    result = await conn.execute(text(f"{statement} RETURNING id"), params)
+    row_id: uuid.UUID = result.scalar_one()
+    return row_id
+
+
+async def insert_shift(
+    conn: AsyncConnection,
+    company_id: uuid.UUID,
+    employee_id: uuid.UUID,
+    starts_at: datetime,
+    hours: int,
+) -> uuid.UUID:
+    return await _insert_returning_id(
+        conn,
+        "INSERT INTO shifts (company_id, employee_id, starts_at, ends_at) VALUES (:c, :e, :s, :x)",
+        {
+            "c": company_id,
+            "e": employee_id,
+            "s": starts_at,
+            "x": starts_at + timedelta(hours=hours),
+        },
+    )
+
+
+async def insert_attendance_event(
+    conn: AsyncConnection,
+    company_id: uuid.UUID,
+    employee_id: uuid.UUID,
+    occurred_at: datetime,
+    event_type: str = "clock_in",
+) -> uuid.UUID:
+    return await _insert_returning_id(
+        conn,
+        "INSERT INTO attendance_events (company_id, employee_id, event_type, occurred_at) "
+        "VALUES (:c, :e, :t, :o)",
+        {"c": company_id, "e": employee_id, "t": event_type, "o": occurred_at},
+    )
+
+
+async def insert_access_log(
+    conn: AsyncConnection,
+    company_id: uuid.UUID,
+    employee_id: uuid.UUID,
+    occurred_at: datetime,
+) -> uuid.UUID:
+    return await _insert_returning_id(
+        conn,
+        "INSERT INTO access_logs (company_id, employee_id, door, direction, granted, occurred_at) "
+        "VALUES (:c, :e, 'main', 'in', true, :o)",
+        {"c": company_id, "e": employee_id, "o": occurred_at},
+    )
+
+
+async def insert_payroll_run(  # noqa: PLR0913 - one argument per payroll column under test
+    conn: AsyncConnection,
+    company_id: uuid.UUID,
+    employee_id: uuid.UUID,
+    period_start: date,
+    period_end: date,
+    *,
+    regular_hours: Decimal,
+    overtime_hours: Decimal,
+    gross_pay: Decimal,
+) -> uuid.UUID:
+    return await _insert_returning_id(
+        conn,
+        "INSERT INTO payroll_runs (company_id, employee_id, period_start, period_end, "
+        "regular_hours, overtime_hours, gross_pay) VALUES (:c, :e, :ps, :pe, :r, :o, :g)",
+        {
+            "c": company_id,
+            "e": employee_id,
+            "ps": period_start,
+            "pe": period_end,
+            "r": regular_hours,
+            "o": overtime_hours,
+            "g": gross_pay,
+        },
     )

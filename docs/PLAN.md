@@ -169,7 +169,10 @@ Rules for every slice:
 - Graph node calls `propose_correction` → LangGraph `interrupt()` → dashboard shows pending proposal.
 - Approve / reject via API (not MCP). Only the API applies the change. Every step in `audit_log`.
 - LangGraph Postgres checkpointer.
-- **Done when:** e2e test: propose → approve → record changed + audit rows; reject → nothing changed.
+- LLM-as-Judge scores proposals on a fixed set: given the finding, its evidence and the patch, is the fix
+  supported by the evidence (no invented values)? Proposal-judge baseline added to the CI gate.
+- **Done when:** e2e test: propose → approve → record changed + audit rows; reject → nothing changed;
+  proposal-judge report exists and meets its baseline.
 
 ### Slice 9 — Rules #2 and #3
 - Buddy punching: two employees clock in from the same IP/device within N seconds, repeatedly.

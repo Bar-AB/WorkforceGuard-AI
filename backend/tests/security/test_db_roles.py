@@ -5,18 +5,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from tests.db_helpers import SOURCE_TABLES
 from tests.factories import insert_company, insert_employee, insert_finding
-
-SOURCE_TABLES = [
-    "companies",
-    "employees",
-    "users",
-    "shifts",
-    "attendance_events",
-    "access_logs",
-    "payroll_runs",
-    "overtime_policies",
-]
 
 MCP_READABLE_TABLES = [
     "companies",

@@ -35,6 +35,7 @@ frontend/playwright-report/
 .env
 .env.*
 !.env.example
+!.env.mcp.example
 *.pem
 *.key
 

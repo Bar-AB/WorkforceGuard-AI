@@ -1,6 +1,8 @@
 COMPOSE := docker compose -f infra/docker-compose.yml --env-file $(if $(wildcard .env),.env,.env.example)
+# Exported, not prefixed per command, so recipes also work when make runs them with cmd.exe.
+export PYTHONPATH := backend
 
-.PHONY: up down migrate seed fmt lint lint-backend lint-frontend test test-backend test-frontend eval
+.PHONY: up down migrate seed mcp-user fmt lint lint-backend lint-frontend test test-backend test-frontend eval mcp mcp-inspect
 
 up:
 	$(COMPOSE) up -d --wait
@@ -14,7 +16,10 @@ migrate:
 SEED ?= 42
 
 seed: migrate
-	PYTHONPATH=backend uv run python -m app.seed --seed $(SEED)
+	uv run python -m app.seed --seed $(SEED)
+
+mcp-user: migrate
+	uv run python -m app.db.mcp_password
 
 fmt:
 	uv run ruff format .
@@ -40,4 +45,13 @@ test-frontend:
 	cd frontend && npm test
 
 eval:
-	PYTHONPATH=backend uv run python -m evals.run_rules
+	uv run python -m evals.run_rules
+
+mcp: .env.mcp
+	uv run python -m mcp_server
+
+mcp-inspect: .env.mcp
+	npx @modelcontextprotocol/inspector --cli uv run python -m mcp_server -- -e PYTHONPATH=backend --method tools/list
+
+.env.mcp:
+	@echo "Missing .env.mcp: copy .env.mcp.example to .env.mcp, set the password, then run make mcp-user." && exit 1

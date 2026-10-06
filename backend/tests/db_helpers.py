@@ -10,6 +10,17 @@ from app.config import Settings
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+SOURCE_TABLES = [
+    "companies",
+    "employees",
+    "users",
+    "shifts",
+    "attendance_events",
+    "access_logs",
+    "payroll_runs",
+    "overtime_policies",
+]
+
 
 def alembic_config(database_url: str) -> Config:
     config = Config(str(REPO_ROOT / "alembic.ini"))
