@@ -42,6 +42,47 @@ jobs:
           cat evals/report.md >> "$GITHUB_STEP_SUMMARY"
           exit $status
 
+  judge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      LLM_BASE_URL: http://localhost:11434/v1
+      LLM_MODEL: qwen3:4b
+      LLM_TIMEOUT_SECONDS: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - id: ollama-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.ollama/models
+          key: ollama-qwen3-4b-0.40.0
+      - name: Start Ollama
+        run: |
+          mkdir -p "$HOME/.ollama/models"
+          docker run -d --name ollama -p 11434:11434 -v "$HOME/.ollama/models:/root/.ollama/models" ollama/ollama:0.40.0
+          for _ in $(seq 60); do
+            curl -sf http://localhost:11434/api/tags > /dev/null && exit 0
+            sleep 1
+          done
+          echo "Ollama did not start within 60 s" && exit 1
+      - run: docker exec ollama ollama pull qwen3:4b
+      - run: sudo chown -R "$USER" "$HOME/.ollama"
+      - uses: actions/cache/save@v4
+        if: steps.ollama-cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/.ollama/models
+          key: ollama-qwen3-4b-0.40.0
+      - name: Judge gate (explanation score vs evals/baselines.json)
+        run: |
+          status=0
+          make eval-judge || status=$?
+          cat evals/judge_report.md >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
   frontend:
     runs-on: ubuntu-latest
     steps:

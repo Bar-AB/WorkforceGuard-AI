@@ -7,14 +7,19 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from app.api import employees, findings, health, scans
 from app.api.errors import register_error_handlers
 from app.config import Settings
+from app.llm.provider import open_ollama
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    engine = create_async_engine(Settings().database_url)
+    settings = Settings()
+    engine = create_async_engine(settings.database_url)
     app.state.engine = engine
     try:
-        yield
+        async with open_ollama(settings) as provider:
+            app.state.llm_provider = provider
+            app.state.explain_limit = settings.llm_explain_limit
+            yield
     finally:
         await engine.dispose()
 

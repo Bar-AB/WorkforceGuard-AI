@@ -1,9 +1,12 @@
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from typing import Final
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
+
+TUESDAY_8AM: Final = datetime(2026, 1, 6, 8, tzinfo=UTC)
 
 
 async def insert_company(conn: AsyncConnection) -> uuid.UUID:
@@ -32,17 +35,32 @@ async def insert_finding(
     company_id: uuid.UUID,
     employee_id: uuid.UUID,
     dedup_key: str | None = None,
+    *,
+    detected_at: datetime | None = None,
 ) -> uuid.UUID:
     result = await conn.execute(
         text(
             "INSERT INTO findings (company_id, employee_id, rule_id, rule_version, severity, "
-            "summary, occurred_on, dedup_key) VALUES (:c, :e, 'overtime', 'v1', 'high', "
-            "'Too many hours', '2026-01-06', :k) RETURNING id"
+            "summary, occurred_on, dedup_key, detected_at) VALUES (:c, :e, 'overtime', 'v1', "
+            "'high', 'Too many hours', '2026-01-06', :k, COALESCE(CAST(:d AS timestamptz), now())) "
+            "RETURNING id"
         ),
-        {"c": company_id, "e": employee_id, "k": dedup_key or uuid.uuid4().hex},
+        {"c": company_id, "e": employee_id, "k": dedup_key or uuid.uuid4().hex, "d": detected_at},
     )
     finding_id: uuid.UUID = result.scalar_one()
     return finding_id
+
+
+async def mark_finding_explained(
+    conn: AsyncConnection, finding_id: uuid.UUID, explanation: str = "Already explained."
+) -> None:
+    await conn.execute(
+        text(
+            "UPDATE findings SET explanation = :t, explanation_source = 'llm', "
+            "explanation_prompt_version = 'explain_finding.v1' WHERE id = :id"
+        ),
+        {"t": explanation, "id": finding_id},
+    )
 
 
 async def insert_overtime_policy(conn: AsyncConnection, company_id: uuid.UUID) -> None:
@@ -79,6 +97,14 @@ async def insert_worked_shift(
         ),
         {**tenant, "s": starts_at, "x": ends_at},
     )
+
+
+async def insert_company_with_long_day(conn: AsyncConnection) -> tuple[uuid.UUID, uuid.UUID]:
+    company_id = await insert_company(conn)
+    employee_id = await insert_employee(conn, company_id)
+    await insert_overtime_policy(conn, company_id)
+    await insert_worked_shift(conn, company_id, employee_id, TUESDAY_8AM, hours=13)
+    return company_id, employee_id
 
 
 async def insert_daily_long_shifts(

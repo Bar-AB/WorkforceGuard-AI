@@ -50,6 +50,7 @@ volumes/
 # Evals output (baselines.json stays tracked)
 evals/runs/
 evals/report.md
+evals/judge_report.md
 
 # Logs
 *.log

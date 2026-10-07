@@ -7,28 +7,24 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.db.models import AuditLog, Finding
+from app.llm.provider import LLMMisconfiguredError, LLMUnavailableError
 from app.rules.findings import RuleFinding
 from app.services import scans
 from tests.factories import (
+    TUESDAY_8AM,
     insert_company,
+    insert_company_with_long_day,
     insert_daily_long_shifts,
     insert_employee,
     insert_overtime_policy,
     insert_worked_shift,
 )
+from tests.fake_llm import FAKE_MODEL
 
-# 2026-01-06 is a Tuesday, mid-week, so a 13 h day breaks only the daily limit.
-TUESDAY_8AM = datetime(2026, 1, 6, 8, tzinfo=UTC)
+NO_FALLBACKS = {"llm_unavailable": 0, "llm_misconfigured": 0, "invalid_output": 0}
+
 # A Wednesday, the day the test overtime policy takes effect.
 POLICY_START_8AM = datetime(2025, 1, 1, 8, tzinfo=UTC)
-
-
-async def _company_with_long_day(conn: AsyncConnection) -> uuid.UUID:
-    company_id = await insert_company(conn)
-    employee_id = await insert_employee(conn, company_id)
-    await insert_overtime_policy(conn, company_id)
-    await insert_worked_shift(conn, company_id, employee_id, TUESDAY_8AM, hours=13)
-    return company_id
 
 
 async def _scan(client: AsyncClient, company_id: uuid.UUID) -> dict[str, object]:
@@ -48,7 +44,7 @@ async def _count(
 async def test_scan_stores_finding_for_overtime_day(
     client: AsyncClient, rollback_conn: AsyncConnection
 ) -> None:
-    company_id = await _company_with_long_day(rollback_conn)
+    company_id, _ = await insert_company_with_long_day(rollback_conn)
 
     body = await _scan(client, company_id)
 
@@ -63,7 +59,7 @@ async def test_scan_stores_finding_for_overtime_day(
 async def test_scan_run_twice_stores_no_duplicate_findings(
     client: AsyncClient, rollback_conn: AsyncConnection
 ) -> None:
-    company_id = await _company_with_long_day(rollback_conn)
+    company_id, _ = await insert_company_with_long_day(rollback_conn)
 
     await _scan(client, company_id)
     second = await _scan(client, company_id)
@@ -76,12 +72,17 @@ async def test_scan_run_twice_stores_no_duplicate_findings(
 async def test_scan_writes_audit_row_per_scan_and_per_new_finding(
     client: AsyncClient, rollback_conn: AsyncConnection
 ) -> None:
-    company_id = await _company_with_long_day(rollback_conn)
+    company_id, _ = await insert_company_with_long_day(rollback_conn)
 
     first = await _scan(client, company_id)
     await _scan(client, company_id)
 
-    assert await _count(rollback_conn, AuditLog, company_id=company_id) == 3
+    assert (
+        await _count(rollback_conn, AuditLog, company_id=company_id, action="scan.completed") == 2
+    )
+    assert (
+        await _count(rollback_conn, AuditLog, company_id=company_id, action="finding.created") == 1
+    )
     scan_row = (
         await rollback_conn.execute(
             select(AuditLog).filter_by(entity_id=uuid.UUID(str(first["scan_id"])))
@@ -102,13 +103,27 @@ async def test_scan_writes_audit_row_per_scan_and_per_new_finding(
     assert created.entity_type == "finding"
     assert created.rule_version == "1"
     assert created.evidence["scan_id"] == first["scan_id"]
+    explained = (
+        await rollback_conn.execute(
+            select(AuditLog).filter_by(company_id=company_id, action="finding.explained")
+        )
+    ).one()
+    assert explained.entity_type == "finding"
+    assert explained.entity_id == created.entity_id
+    assert explained.evidence == {
+        "scan_id": first["scan_id"],
+        "source": "llm",
+        "prompt_version": "explain_finding.v2",
+        "fallback_reason": None,
+    }
+    assert explained.model_name == FAKE_MODEL
 
 
 async def test_scan_only_touches_its_own_company(
     client: AsyncClient, rollback_conn: AsyncConnection
 ) -> None:
-    company_a = await _company_with_long_day(rollback_conn)
-    company_b = await _company_with_long_day(rollback_conn)
+    company_a, _ = await insert_company_with_long_day(rollback_conn)
+    company_b, _ = await insert_company_with_long_day(rollback_conn)
 
     await _scan(client, company_a)
 
@@ -185,7 +200,7 @@ async def test_scan_skipped_rule_does_not_stop_other_rules(
 async def test_scan_rule_crashing_unexpectedly_is_not_skipped(
     client: AsyncClient, rollback_conn: AsyncConnection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    company_id = await _company_with_long_day(rollback_conn)
+    company_id, _ = await insert_company_with_long_day(rollback_conn)
     monkeypatch.setitem(scans.RULES, "crashes", scans.Rule("1", _failing_rule_run))
 
     with pytest.raises(RuntimeError, match="rule crashed"):
@@ -213,3 +228,37 @@ async def test_scan_without_company_header_returns_422(client: AsyncClient) -> N
     response = await client.post("/api/v1/scans")
 
     assert response.status_code == 422
+
+
+async def test_scan_response_reports_explanation_counts(
+    client: AsyncClient, rollback_conn: AsyncConnection
+) -> None:
+    company_id, _ = await insert_company_with_long_day(rollback_conn)
+
+    first = await _scan(client, company_id)
+    second = await _scan(client, company_id)
+
+    assert (first["findings_explained"], first["explanations_fallback"]) == (1, 0)
+    assert (second["findings_explained"], second["explanations_fallback"]) == (0, 0)
+    assert first["explanations_fallback_by_reason"] == NO_FALLBACKS
+
+
+@pytest.mark.parametrize(
+    ("fake_llm", "reason"),
+    [
+        ((LLMUnavailableError("down"), LLMUnavailableError("down")), "llm_unavailable"),
+        ((LLMMisconfiguredError("rejected"),), "llm_misconfigured"),
+        (("not json", "not json"), "invalid_output"),
+    ],
+    indirect=["fake_llm"],
+    ids=["llm_unavailable", "llm_misconfigured", "invalid_output"],
+)
+async def test_scan_response_counts_fallbacks_by_reason(
+    client: AsyncClient, rollback_conn: AsyncConnection, reason: str
+) -> None:
+    company_id, _ = await insert_company_with_long_day(rollback_conn)
+
+    body = await _scan(client, company_id)
+
+    assert (body["explanations_fallback"], body["explanations_deferred"]) == (1, 0)
+    assert body["explanations_fallback_by_reason"] == {**NO_FALLBACKS, reason: 1}

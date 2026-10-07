@@ -156,3 +156,64 @@ async def test_finding_with_same_dedup_key_in_other_company_is_allowed(
         company_id = await insert_company(rollback_conn)
         employee_id = await insert_employee(rollback_conn, company_id)
         await insert_finding(rollback_conn, company_id, employee_id, dedup_key="k")
+
+
+async def _set_finding_explanation(conn: AsyncConnection, columns: dict[str, str | None]) -> None:
+    company_id = await insert_company(conn)
+    employee_id = await insert_employee(conn, company_id)
+    finding_id = await insert_finding(conn, company_id, employee_id)
+    await conn.execute(
+        text(
+            "UPDATE findings SET explanation = :t, explanation_source = :s, "
+            "explanation_prompt_version = :v WHERE id = :id"
+        ),
+        {**columns, "id": finding_id},
+    )
+
+
+@pytest.mark.parametrize(
+    ("columns", "constraint"),
+    [
+        (
+            {"t": "Why.", "s": "guess", "v": "explain_finding.v1"},
+            "ck_findings_explanation_source",
+        ),
+        ({"t": "Why.", "s": None, "v": None}, "ck_findings_explanation_complete"),
+        ({"t": "Why.", "s": "llm", "v": None}, "ck_findings_explanation_complete"),
+    ],
+    ids=["unknown_source", "text_without_source", "source_without_version"],
+)
+async def test_findings_explanation_checks(
+    rollback_conn: AsyncConnection, columns: dict[str, str | None], constraint: str
+) -> None:
+    with pytest.raises(IntegrityError, match=constraint):
+        await _set_finding_explanation(rollback_conn, columns)
+
+
+@pytest.mark.parametrize("source", ["llm", "fallback"])
+async def test_findings_explanation_all_set_is_accepted(
+    rollback_conn: AsyncConnection, source: str
+) -> None:
+    await _set_finding_explanation(
+        rollback_conn, {"t": "Why.", "s": source, "v": "explain_finding.v1"}
+    )
+
+    stored = await rollback_conn.execute(
+        text("SELECT count(*) FROM findings WHERE explanation_source = :s"), {"s": source}
+    )
+    assert stored.scalar_one() == 1
+
+
+@pytest.mark.parametrize("evidence", ["[]", '"x"', "1", "null"])
+async def test_finding_with_non_object_evidence_is_rejected(
+    rollback_conn: AsyncConnection, evidence: str
+) -> None:
+    company_id = await insert_company(rollback_conn)
+    employee_id = await insert_employee(rollback_conn, company_id)
+    finding_id = await insert_finding(rollback_conn, company_id, employee_id)
+
+    with pytest.raises(IntegrityError, match="ck_findings_evidence_object"):
+        await rollback_conn.execute(
+            text("UPDATE findings SET evidence = CAST(:e AS jsonb) WHERE id = :id"),
+            {"e": evidence, "id": finding_id},
+        )

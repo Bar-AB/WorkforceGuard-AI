@@ -12,10 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from app.db.models import AuditLog, Finding
 from app.db.worked_time import load_overtime_limits, load_worked_days
 from app.errors import ConflictError
+from app.llm.structured import FallbackReason
 from app.rules import overtime
 from app.rules.findings import RuleFinding
-from app.security.tenant import TenantContext
-from app.services import companies
 
 RuleRunner = Callable[[AsyncConnection, uuid.UUID], Awaitable[list[RuleFinding]]]
 
@@ -40,7 +39,7 @@ class SkippedRule(BaseModel):
     reason: str
 
 
-class ScanResult(BaseModel):
+class DetectionSummary(BaseModel):
     scan_id: uuid.UUID
     findings_detected: int
     findings_created: int
@@ -48,23 +47,14 @@ class ScanResult(BaseModel):
     rules_skipped: list[SkippedRule]
 
 
-async def run_scan(conn: AsyncConnection, tenant: TenantContext) -> ScanResult:
-    """Safe to re-run: a finding already stored is skipped, not duplicated."""
-    await companies.require_company(conn, tenant)
-    scan_id = uuid.uuid4()
-    detected, skipped = await _run_rules(conn, tenant.company_id)
-    created = await _store_new_findings(conn, tenant.company_id, detected)
-    result = ScanResult(
-        scan_id=scan_id,
-        findings_detected=len(detected),
-        findings_created=len(created),
-        rules_skipped=skipped,
-    )
-    await _audit_scan(conn, tenant.company_id, result, created)
-    return result
+class ScanResult(DetectionSummary):
+    findings_explained: int
+    explanations_fallback: int
+    explanations_fallback_by_reason: dict[FallbackReason, int]
+    explanations_deferred: int
 
 
-async def _run_rules(
+async def run_rules(
     conn: AsyncConnection, company_id: uuid.UUID
 ) -> tuple[list[RuleFinding], list[SkippedRule]]:
     """A rule that cannot judge this company's data is reported as skipped, not fatal."""
@@ -78,7 +68,7 @@ async def _run_rules(
     return detected, skipped
 
 
-async def _store_new_findings(
+async def store_new_findings(
     conn: AsyncConnection, company_id: uuid.UUID, findings: Sequence[RuleFinding]
 ) -> list[tuple[uuid.UUID, str]]:
     """Returns (id, rule_version) of the findings that were not stored before."""
@@ -109,23 +99,23 @@ def _finding_row(company_id: uuid.UUID, finding: RuleFinding) -> dict[str, objec
     }
 
 
-async def _audit_scan(
+async def audit_scan(
     conn: AsyncConnection,
     company_id: uuid.UUID,
-    result: ScanResult,
+    summary: DetectionSummary,
     created: Sequence[tuple[uuid.UUID, str]],
 ) -> None:
     scan_row = {
         "company_id": company_id,
         "action": "scan.completed",
         "entity_type": "scan",
-        "entity_id": result.scan_id,
+        "entity_id": summary.scan_id,
         "rule_version": None,
         "evidence": {
             "rules": {rule_id: rule.version for rule_id, rule in RULES.items()},
-            "findings_detected": result.findings_detected,
-            "findings_created": result.findings_created,
-            "rules_skipped": [skip.model_dump() for skip in result.rules_skipped],
+            "findings_detected": summary.findings_detected,
+            "findings_created": summary.findings_created,
+            "rules_skipped": [skip.model_dump() for skip in summary.rules_skipped],
         },
     }
     finding_rows = [
@@ -135,7 +125,7 @@ async def _audit_scan(
             "entity_type": "finding",
             "entity_id": finding_id,
             "rule_version": rule_version,
-            "evidence": {"scan_id": str(result.scan_id)},
+            "evidence": {"scan_id": str(summary.scan_id)},
         }
         for finding_id, rule_version in created
     ]
