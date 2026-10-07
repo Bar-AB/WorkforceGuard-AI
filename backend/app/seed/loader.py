@@ -9,7 +9,6 @@ from app.seed.generator import Dataset
 
 
 async def _delete_companies(conn: AsyncConnection, company_ids: list[uuid.UUID]) -> None:
-    """Removes the companies and every row they own, agent output included."""
     for table in reversed(Base.metadata.sorted_tables):
         if "company_id" in table.c:
             await conn.execute(delete(table).where(table.c.company_id.in_(company_ids)))
@@ -18,7 +17,6 @@ async def _delete_companies(conn: AsyncConnection, company_ids: list[uuid.UUID])
 
 
 async def load_dataset(conn: AsyncConnection, dataset: Dataset) -> None:
-    """Replaces the dataset's companies with a fresh copy. Other companies are untouched."""
     await _delete_companies(conn, dataset.company_ids())
     for table, rows in dataset.tables():
         if rows:

@@ -5,10 +5,10 @@ from datetime import date
 from typing import Final, Literal
 
 from langsmith import tracing_context
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from app.llm.prompt_loader import Prompt, load_prompt
-from app.llm.provider import ChatMessage, LLMProvider
+from app.llm.provider import NO_NUL_PATTERN, ChatMessage, LLMProvider
 from app.llm.structured import FallbackReason, LLMOutputError, complete_structured
 from app.rules import overtime
 from app.security.injection import wrap_untrusted
@@ -43,14 +43,7 @@ class ExplainResult:
 class _Explanation(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    text: str = Field(min_length=1, max_length=MAX_EXPLANATION_CHARS)
-
-    @field_validator("text")
-    @classmethod
-    def _refuse_nul(cls, text: str) -> str:
-        if "\x00" in text:
-            raise ValueError("text must not contain NUL characters")
-        return text
+    text: str = Field(min_length=1, max_length=MAX_EXPLANATION_CHARS, pattern=NO_NUL_PATTERN)
 
 
 def _safe_evidence(facts: FindingFacts) -> dict[str, JsonValue]:

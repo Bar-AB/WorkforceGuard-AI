@@ -78,10 +78,13 @@ def _response_schema(schema: type[BaseModel]) -> ResponseSchema:
 
 
 async def _attempt[T: BaseModel](
-    provider: LLMProvider, messages: Sequence[ChatMessage], schema: type[T]
+    provider: LLMProvider,
+    messages: Sequence[ChatMessage],
+    schema: type[T],
+    wire_schema: ResponseSchema,
 ) -> StructuredReply[T] | _Failure:
     try:
-        response = await provider.complete(messages, _response_schema(schema))
+        response = await provider.complete(messages, wire_schema)
     except LLMMisconfiguredError:
         return _Failure("llm_misconfigured", retryable=False)
     except LLMUnavailableError:
@@ -98,9 +101,10 @@ async def _attempt[T: BaseModel](
 async def complete_structured[T: BaseModel](
     provider: LLMProvider, messages: Sequence[ChatMessage], schema: type[T]
 ) -> StructuredReply[T]:
+    wire_schema = _response_schema(schema)
     last_reason: FallbackReason = "invalid_output"
     for _ in range(MAX_ATTEMPTS):
-        outcome = await _attempt(provider, messages, schema)
+        outcome = await _attempt(provider, messages, schema, wire_schema)
         if isinstance(outcome, StructuredReply):
             return outcome
         last_reason = outcome.reason

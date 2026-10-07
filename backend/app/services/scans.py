@@ -1,5 +1,3 @@
-"""Runs every detection rule for one company and stores what is new."""
-
 import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
@@ -30,7 +28,6 @@ async def _run_overtime(conn: AsyncConnection, company_id: uuid.UUID) -> list[Ru
     return overtime.check_overtime(days, await load_overtime_limits(conn, company_id))
 
 
-# Rule ids match the anomaly_labels.anomaly_type they are scored against in evals.
 RULES: dict[str, Rule] = {overtime.RULE_ID: Rule(overtime.RULE_VERSION, _run_overtime)}
 
 
@@ -43,7 +40,6 @@ class DetectionSummary(BaseModel):
     scan_id: uuid.UUID
     findings_detected: int
     findings_created: int
-    # Rules the company's data could not be judged by (e.g. missing config); the rest still ran.
     rules_skipped: list[SkippedRule]
 
 
@@ -57,7 +53,6 @@ class ScanResult(DetectionSummary):
 async def run_rules(
     conn: AsyncConnection, company_id: uuid.UUID
 ) -> tuple[list[RuleFinding], list[SkippedRule]]:
-    """A rule that cannot judge this company's data is reported as skipped, not fatal."""
     detected: list[RuleFinding] = []
     skipped: list[SkippedRule] = []
     for rule_id, rule in RULES.items():
@@ -71,7 +66,6 @@ async def run_rules(
 async def store_new_findings(
     conn: AsyncConnection, company_id: uuid.UUID, findings: Sequence[RuleFinding]
 ) -> list[tuple[uuid.UUID, str]]:
-    """Returns (id, rule_version) of the findings that were not stored before."""
     if not findings:
         return []
     statement = (
@@ -79,8 +73,6 @@ async def store_new_findings(
         .on_conflict_do_nothing(constraint="uq_findings_company_id_dedup_key")
         .returning(Finding.id, Finding.rule_version)
     )
-    # A parameter list, not .values([...]): SQLAlchemy then batches the rows, so a big scan
-    # never hits asyncpg's 32767 bind-parameter limit for one statement.
     rows = [_finding_row(company_id, finding) for finding in findings]
     return [(row.id, row.rule_version) for row in await conn.execute(statement, rows)]
 

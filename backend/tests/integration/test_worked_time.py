@@ -10,7 +10,6 @@ from app.db.worked_time import load_overtime_limits, load_worked_days
 from app.rules.overtime import OvertimeLimits
 from tests.factories import insert_company, insert_employee
 
-# 2026-01-08 is a Thursday; the Israeli week runs Sunday to Saturday.
 THURSDAY = date(2026, 1, 8)
 SATURDAY = date(2026, 1, 10)
 SUNDAY = date(2026, 1, 11)
@@ -29,7 +28,6 @@ async def _work(
     shift: tuple[datetime, datetime],
     punches: tuple[datetime, datetime | None],
 ) -> uuid.UUID:
-    """Adds a shift and its punches. Returns the clock-out id (or clock-in if none)."""
     tenant = {"company_id": company_id, "employee_id": employee_id}
     await conn.execute(insert(Shift), [{**tenant, "starts_at": shift[0], "ends_at": shift[1]}])
     clock_in, clock_out = punches

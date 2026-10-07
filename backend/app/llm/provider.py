@@ -49,7 +49,7 @@ class LLMProvider(Protocol):
 
 
 _TRANSIENT_CLIENT_STATUSES: Final = frozenset({408, 429})
-_NO_NUL: Final = r"^[^\x00]*$"
+NO_NUL_PATTERN: Final = r"^[^\x00]*$"
 MAX_REPLY_CHARS: Final = 32_000
 MAX_REPLY_TOKENS: Final = 512
 MAX_ERROR_REASON_CHARS: Final = 200
@@ -77,7 +77,7 @@ class _ErrorBody(BaseModel):
 
 
 class _ChatCompletion(BaseModel):
-    model: str = Field(min_length=1, max_length=200, pattern=_NO_NUL)
+    model: str = Field(min_length=1, max_length=200, pattern=NO_NUL_PATTERN)
     choices: list[_Choice] = Field(min_length=1)
     usage: _Usage = Field(default_factory=_Usage)
 

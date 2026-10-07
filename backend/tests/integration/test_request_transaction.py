@@ -1,5 +1,3 @@
-"""The real per-request transaction: committed before the response, rolled back on error."""
-
 import uuid
 from collections.abc import AsyncIterator
 
@@ -35,7 +33,6 @@ def _app_with_failing_write_route() -> FastAPI:
 async def api(
     committing_database_url: str, monkeypatch: pytest.MonkeyPatch
 ) -> AsyncIterator[AsyncClient]:
-    """Client on the real app and real `get_connection`, reporting crashes as HTTP 500."""
     monkeypatch.setenv("DATABASE_URL", committing_database_url)
     app = _app_with_failing_write_route()
     fake = FakeLLM()

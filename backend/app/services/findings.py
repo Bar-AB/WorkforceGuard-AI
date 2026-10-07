@@ -1,5 +1,3 @@
-"""Reads stored findings for one company, newest first."""
-
 import base64
 import binascii
 import uuid
@@ -36,7 +34,6 @@ class FindingDetail(FindingSummary):
 
 class FindingsPage(BaseModel):
     items: list[FindingSummary]
-    # Pass back as `cursor` to get the next page; None on the last page.
     next_cursor: str | None
 
 
@@ -102,7 +99,6 @@ def _decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
 
 
 def _utc_instant(iso_text: str) -> datetime:
-    """Raises OverflowError when the instant lies outside what UTC datetimes can hold."""
     moment = datetime.fromisoformat(iso_text)
     if moment.tzinfo is None:
         raise ValueError("Cursor time has no time zone.")

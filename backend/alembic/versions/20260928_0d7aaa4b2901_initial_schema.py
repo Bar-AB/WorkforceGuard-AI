@@ -1,10 +1,3 @@
-"""Initial schema: tenant tables, constraints, and least-privilege roles.
-
-Revision ID: 0d7aaa4b2901
-Revises:
-Create Date: 2026-09-28 14:30:39.838322
-"""
-
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -26,8 +19,6 @@ SOURCE_TABLES = (
     "payroll_runs",
     "overtime_policies",
 )
-# Agents may only create rows in their initial state: status, decisions, actor and
-# timestamps are left to column defaults or to a human acting through the API.
 MCP_INSERT_COLUMNS = {
     "findings": (
         "company_id",
@@ -57,7 +48,6 @@ MCP_INSERT_COLUMNS = {
         "evidence",
     ),
 }
-# Agents must not see login identities or the eval ground truth they are scored against.
 MCP_READABLE_TABLES = (
     *(t for t in SOURCE_TABLES if t != "users"),
     "findings",
@@ -68,13 +58,11 @@ ROLES = ("app_rw", "mcp_reader")
 
 
 def _create_role_if_missing(role: str) -> None:
-    """Roles are cluster-wide, so another database may already have created them."""
     op.execute(
         f"DO $$ BEGIN "
         f"IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{role}') "
         f"THEN CREATE ROLE {role} NOLOGIN; END IF; END $$"
     )
-    # A pre-existing role may carry stronger attributes; force them back down.
     op.execute(f"ALTER ROLE {role} NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE")
 
 
@@ -85,12 +73,10 @@ def _grant_role_privileges() -> None:
     op.execute(
         f"GRANT SELECT, INSERT, UPDATE, DELETE ON {', '.join(APP_WRITABLE_TABLES)} TO app_rw"
     )
-    # The audit trail is append-only, even for the API.
     op.execute("GRANT SELECT, INSERT ON audit_log TO app_rw")
     op.execute(f"GRANT SELECT ON {', '.join(MCP_READABLE_TABLES)} TO mcp_reader")
     for table, columns in MCP_INSERT_COLUMNS.items():
         op.execute(f"GRANT INSERT ({', '.join(columns)}) ON {table} TO mcp_reader")
-    # INSERT ... RETURNING id needs SELECT on id; the rest of the audit trail stays hidden.
     op.execute("GRANT SELECT (id) ON audit_log TO mcp_reader")
 
 
@@ -465,7 +451,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Roles stay: they are cluster-wide and may hold grants in other databases.
     op.execute(f"REVOKE USAGE ON SCHEMA public FROM {', '.join(ROLES)}")
     op.drop_index(
         op.f("ix_proposed_corrections_company_id_status_created_at"),

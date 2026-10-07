@@ -1,10 +1,3 @@
-"""Add attendance_events.device_id so buddy punching can be traced to a clock-in device.
-
-Revision ID: 7c8a5647ab3d
-Revises: 0d7aaa4b2901
-Create Date: 2026-09-29 19:05:59.855339
-"""
-
 from collections.abc import Sequence
 
 import sqlalchemy as sa

@@ -17,7 +17,6 @@ def fake_llm(request: pytest.FixtureRequest) -> FakeLLM:
 
 @pytest.fixture
 async def client(rollback_conn: AsyncConnection, fake_llm: FakeLLM) -> AsyncIterator[AsyncClient]:
-    """API client whose requests all share the test's rolled-back connection."""
     app = create_app()
 
     async def _test_connection() -> AsyncIterator[AsyncConnection]:

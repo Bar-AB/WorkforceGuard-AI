@@ -8,7 +8,13 @@ import pytest
 from langsmith import get_tracing_context
 from pydantic import JsonValue
 
-from app.llm.explain import ExplainResult, FindingFacts, explain_finding, finding_payload
+from app.llm.explain import (
+    EVIDENCE_KEYS_BY_RULE,
+    ExplainResult,
+    FindingFacts,
+    explain_finding,
+    finding_payload,
+)
 from app.llm.provider import (
     ChatMessage,
     LLMMisconfiguredError,
@@ -16,7 +22,13 @@ from app.llm.provider import (
     LLMUnavailableError,
     ResponseSchema,
 )
+from app.services.scans import RULES
 from tests.fake_llm import FAKE_EXPLANATION, FAKE_MODEL, FakeLLM
+
+
+def test_every_detection_rule_declares_its_llm_evidence_keys() -> None:
+    assert set(EVIDENCE_KEYS_BY_RULE) == set(RULES)
+
 
 SOURCE_ID = "5f0c1d2e-3a4b-4c5d-8e9f-0a1b2c3d4e5f"
 EMPLOYEE_ID = "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a"

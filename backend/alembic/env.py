@@ -15,7 +15,6 @@ if config.config_file_name is not None:
 
 
 def _database_url() -> str:
-    """Tests pass a throwaway DB via sqlalchemy.url; everything else uses DATABASE_URL."""
     return config.get_main_option("sqlalchemy.url") or Settings().database_url
 
 

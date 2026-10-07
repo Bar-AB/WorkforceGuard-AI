@@ -23,7 +23,6 @@ from tests.fake_llm import FAKE_MODEL
 
 NO_FALLBACKS = {"llm_unavailable": 0, "llm_misconfigured": 0, "invalid_output": 0}
 
-# A Wednesday, the day the test overtime policy takes effect.
 POLICY_START_8AM = datetime(2025, 1, 1, 8, tzinfo=UTC)
 
 
@@ -213,7 +212,6 @@ async def test_scan_stores_more_findings_than_one_statement_can_bind(
     company_id = await insert_company(rollback_conn)
     employee_id = await insert_employee(rollback_conn, company_id)
     await insert_overtime_policy(rollback_conn, company_id)
-    # 3700 days of 13 h: 3700 daily breaches plus 528 full Sunday-Saturday weeks over 58 h.
     await insert_daily_long_shifts(
         rollback_conn, company_id, employee_id, POLICY_START_8AM, days=3700
     )

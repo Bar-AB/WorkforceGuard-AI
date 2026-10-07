@@ -80,7 +80,6 @@ async def insert_worked_shift(
     starts_at: datetime,
     hours: int,
 ) -> None:
-    """A shift worked exactly as planned: clock in at the start, clock out at the end."""
     ends_at = starts_at + timedelta(hours=hours)
     tenant = {"c": company_id, "e": employee_id}
     await conn.execute(
@@ -114,7 +113,6 @@ async def insert_daily_long_shifts(
     first_start: datetime,
     days: int,
 ) -> None:
-    """One 13 h shift a day for `days` days, each worked as planned. Bulk, for volume tests."""
     params = {"c": company_id, "e": employee_id, "first": first_start, "days": days, "h": 13}
     starts = (
         "WITH starts AS (SELECT CAST(:first AS timestamptz) + make_interval(days => n) AS s "

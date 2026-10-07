@@ -97,7 +97,6 @@ async def migrated_engine(migrated_database_url: str) -> AsyncIterator[AsyncEngi
 
 @pytest.fixture
 async def rollback_conn(migrated_engine: AsyncEngine) -> AsyncIterator[AsyncConnection]:
-    """Connection whose work is always rolled back, so tests never leak rows."""
     async with migrated_engine.connect() as conn:
         transaction = await conn.begin()
         yield conn
