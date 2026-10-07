@@ -87,3 +87,24 @@ a brief explanation of each crucial file (skip `__init__`, toml, lock files, tes
 (test/eval numbers); how to try it; what is left for later; and a "why it is built this way" section
 for every non-obvious choice in the code (the reasons that would otherwise be comments). Give the user the link.
 When follow-up work changes the slice, update the same artifact (same URL) instead of making a new one.
+
+Before the slice is committed (after the build is verified, before the PR), two passes:
+1. **Cleanup pass** over every file the slice touched: delete comments and docstrings (keep only MCP tool
+   docstrings and `# noqa` / `# type: ignore` / `# fmt: skip` markers), remove dead or unneeded code,
+   refactor where it clearly simplifies, then `make fmt`. Any removed comment that explains a *why* goes
+   into the slice review artifact first, so no knowledge is lost.
+2. **graphify review**: run `graphify update .`, then use `graphify query` / `path` / `explain` and
+   GRAPH_REPORT.md (god nodes, import cycles, missing links between things that must change together,
+   functions with no callers) to find anything worth fixing now or in later slices. Fix what belongs to
+   this slice; list the rest in the artifact and the slice doc's Known limits.
+Then `make lint`, `make test` (and `make eval` when relevant) again, and update the artifact.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
