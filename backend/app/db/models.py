@@ -42,7 +42,6 @@ def _in(column: str, values: tuple[str, ...]) -> str:
 
 
 def _same_tenant_fk(column: str, target: str, name: str) -> ForeignKeyConstraint:
-    """Composite FK so a row can only point at a row of the same company."""
     return ForeignKeyConstraint(
         ["company_id", column], [f"{target}.company_id", f"{target}.id"], name=name
     )
@@ -188,13 +187,18 @@ class Finding(_TenantRow, Base):
     __tablename__ = "findings"
     __table_args__ = (
         UniqueConstraint("company_id", "id"),
-        # Lets a scan re-run without storing the same anomaly twice.
         UniqueConstraint("company_id", "dedup_key"),
         _same_tenant_fk("employee_id", "employees", "employee"),
         CheckConstraint(_in("severity", ("low", "medium", "high")), name="severity"),
         CheckConstraint(_in("status", ("open", "confirmed", "dismissed")), name="status"),
+        CheckConstraint("jsonb_typeof(evidence) = 'object'", name="evidence_object"),
+        CheckConstraint(_in("explanation_source", ("llm", "fallback")), name="explanation_source"),
+        CheckConstraint(
+            "(explanation IS NULL) = (explanation_source IS NULL) "
+            "AND (explanation IS NULL) = (explanation_prompt_version IS NULL)",
+            name="explanation_complete",
+        ),
         Index(None, "company_id", "employee_id", "detected_at"),
-        # Serves the newest-first findings list and its (detected_at, id) cursor.
         Index(None, "company_id", "detected_at", "id"),
     )
 
@@ -210,6 +214,9 @@ class Finding(_TenantRow, Base):
     detected_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    explanation: Mapped[str | None] = mapped_column(Text)
+    explanation_source: Mapped[str | None] = mapped_column(Text)
+    explanation_prompt_version: Mapped[str | None] = mapped_column(Text)
 
 
 class ProposedCorrection(_TenantRow, Base):
@@ -246,7 +253,6 @@ class AuditLog(_TenantRow, Base):
     __tablename__ = "audit_log"
     __table_args__ = (Index(None, "company_id", "occurred_at"),)
 
-    # Defaults to the DB role so an agent cannot write rows in someone else's name.
     actor: Mapped[str] = mapped_column(Text, server_default=text("current_user"))
     action: Mapped[str] = mapped_column(Text)
     entity_type: Mapped[str] = mapped_column(Text)

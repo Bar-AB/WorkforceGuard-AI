@@ -5,7 +5,6 @@ from app.seed.generator import generate_dataset
 from app.seed.loader import load_dataset
 from evals.run_rules import evaluate
 
-# Enough days for night shifts, near misses and week boundaries; small enough to stay fast.
 SEEDED = SeedConfig(
     employees_per_company=40,
     days=21,

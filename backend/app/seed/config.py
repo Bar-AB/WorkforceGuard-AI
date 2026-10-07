@@ -5,13 +5,12 @@ DAYS_PER_WEEK = 7
 
 
 class SeedConfigError(ValueError):
-    """A seed config that cannot produce the dataset it describes."""
+    pass
 
 
 @dataclass(frozen=True)
 class SeedConfig:
     seed: int = 42
-    # A Sunday, so the first generated week is a full Israeli work week (Sunday to Thursday).
     start_date: date = date(2026, 1, 4)
     days: int = 60
     employees_per_company: int = 200

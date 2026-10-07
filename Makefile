@@ -1,14 +1,25 @@
 COMPOSE := docker compose -f infra/docker-compose.yml --env-file $(if $(wildcard .env),.env,.env.example)
 # Exported, not prefixed per command, so recipes also work when make runs them with cmd.exe.
 export PYTHONPATH := backend
+UV_ENV := $(if $(wildcard .env),--env-file .env,)
+LLM_MODEL ?= qwen3:4b
 
-.PHONY: up down migrate seed mcp-user fmt lint lint-backend lint-frontend test test-backend test-frontend eval mcp mcp-inspect
+.PHONY: up up-llm llm-pull api down migrate seed mcp-user fmt lint lint-backend lint-frontend test test-backend test-frontend eval eval-judge mcp mcp-inspect
 
 up:
 	$(COMPOSE) up -d --wait
 
+up-llm:
+	$(COMPOSE) --profile llm up -d --wait
+
+llm-pull:
+	$(COMPOSE) exec ollama ollama pull $(LLM_MODEL)
+
+api:
+	uv run $(UV_ENV) uvicorn app.main:app --port 8000
+
 down:
-	$(COMPOSE) down
+	$(COMPOSE) --profile llm down
 
 migrate:
 	uv run alembic upgrade head
@@ -46,6 +57,9 @@ test-frontend:
 
 eval:
 	uv run python -m evals.run_rules
+
+eval-judge:
+	uv run $(UV_ENV) python -m evals.judge $(if $(filter 1,$(FULL)),--full,)
 
 mcp: .env.mcp
 	uv run python -m mcp_server

@@ -1,5 +1,3 @@
-"""Overtime rule: a day over the daily limit, or a week over the weekly limit."""
-
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -14,7 +12,7 @@ RULE_VERSION = "1"
 
 
 class MissingOvertimePolicyError(ConflictError):
-    """No overtime policy covers a worked day, so its hours cannot be judged."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -33,10 +31,8 @@ class OvertimeLimits:
 @dataclass(frozen=True)
 class WorkedDay:
     employee_id: uuid.UUID
-    # The date the shift started, so a night shift counts as one day.
     work_date: date
     hours: Decimal
-    # Running total for the Sunday-to-Saturday week, this day included.
     week_hours_to_date: Decimal
     last_clock_out_id: uuid.UUID
 
@@ -108,5 +104,4 @@ def _finding(
 
 
 def _plain(hours: Decimal) -> str:
-    """12.00 -> "12", 10.50 -> "10.5", never scientific notation."""
     return f"{hours.normalize():f}"

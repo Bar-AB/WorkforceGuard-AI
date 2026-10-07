@@ -1,12 +1,3 @@
-"""Add findings.occurred_on and findings.dedup_key so a re-run scan stores no duplicates.
-
-Also indexes findings for the newest-first list.
-
-Revision ID: 3f1e9b2c6a10
-Revises: 7c8a5647ab3d
-Create Date: 2026-10-01 10:00:00.000000
-"""
-
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -21,7 +12,6 @@ NEW_COLUMNS = ("occurred_on", "dedup_key")
 
 
 def upgrade() -> None:
-    # No findings exist before this revision (nothing writes them yet), so NOT NULL is safe.
     op.add_column("findings", sa.Column("occurred_on", sa.Date(), nullable=False))
     op.add_column("findings", sa.Column("dedup_key", sa.Text(), nullable=False))
     op.create_unique_constraint(

@@ -1,5 +1,3 @@
-"""Seeded synthetic HR data: the same config always yields the same rows, ids included."""
-
 import random
 import uuid
 from collections import defaultdict
@@ -25,7 +23,6 @@ from app.seed.vocab import (
 )
 
 Row = dict[str, object]
-# (index into the company's staff list, shift start date)
 Slot = tuple[int, date]
 
 COMPANY_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_DNS, "seed.workforceguard.example")
@@ -36,8 +33,6 @@ SHIFT_STARTS = (time(7), time(15), time(23))
 SHIFT_WEIGHTS = (60, 25, 15)
 SHIFT_LENGTH = timedelta(hours=8)
 
-# Israeli Hours of Work and Rest Law: 8.6 h standard day on a 5-day week, 12 h daily cap,
-# 42 h standard week plus 16 h weekly overtime.
 STANDARD_DAILY_HOURS = Decimal("8.6")
 MAX_DAILY_HOURS = Decimal(12)
 MAX_WEEKLY_HOURS = Decimal(58)
@@ -48,11 +43,8 @@ PAY_PERIOD_DAYS = 14
 
 MANUAL_SHARE = 0.02
 MOBILE_SHARE = 0.08
-# Legal overtime (9-11.3 h days) so rules are also tested against near misses.
 NEAR_MISS_SHARE = 0.03
 HOUR = 3600
-# Gap between two colleagues clocking in on one terminal. It stays wider than the
-# buddy offset plus any buddy-punch window up to 60 s, so only labelled pairs look alike.
 ARRIVAL_GAP_SECONDS = (120, 200)
 BUDDY_OFFSET_SECONDS = (3, 40)
 FIRST_ARRIVAL_LEAD = timedelta(minutes=30)
@@ -94,8 +86,6 @@ class _Evidence:
 class _Punch:
     clock_in: datetime
     clock_out: datetime
-    # Overtime is planned, so the shift is scheduled to cover it and the badge-out
-    # stays inside the shift window. None means the standard 8 h shift.
     planned_end: datetime | None = None
 
 
@@ -112,7 +102,6 @@ class Dataset:
     anomaly_labels: list[Row] = field(default_factory=list)
 
     def tables(self) -> list[tuple[Table, list[Row]]]:
-        """Tables in foreign-key order, parents first."""
         rows_by_table = {
             "companies": self.companies,
             "overtime_policies": self.overtime_policies,
@@ -131,7 +120,6 @@ class Dataset:
 
 
 def company_id_for(name: str) -> uuid.UUID:
-    """Stable across seeds, so re-seeding with another seed replaces the same companies."""
     return uuid.uuid5(COMPANY_NAMESPACE, name)
 
 
@@ -269,7 +257,6 @@ class _CompanyGenerator:
         return _at(day, self.staff[index].shift_start)
 
     def _normal_punches(self, slots: list[Slot]) -> dict[Slot, _Punch]:
-        """Colleagues on one terminal and shift arrive one by one, never seconds apart."""
         queues: dict[tuple[date, time, str], list[Slot]] = defaultdict(list)
         for slot in slots:
             staff = self.staff[slot[0]]
@@ -285,7 +272,6 @@ class _CompanyGenerator:
         return punches
 
     def _overtime(self, punch: _Punch, low_hours: float, high_hours: float) -> _Punch:
-        """Same arrival, but a planned long day of low to high hours in total."""
         worked = self._seconds(int(low_hours * HOUR), int(high_hours * HOUR))
         clock_out = punch.clock_in + worked
         return _Punch(punch.clock_in, clock_out, _round_up(clock_out, SCHEDULE_STEP))
@@ -293,7 +279,6 @@ class _CompanyGenerator:
     def _plan_slot_kinds(
         self, slots: list[Slot], punches: dict[Slot, _Punch]
     ) -> dict[Slot, _SlotKind]:
-        """Marks anomaly slots and rewrites their punches. Unmarked slots stay normal."""
         kinds: dict[Slot, _SlotKind] = {}
         for victim, buddy in self._pick_buddy_slots().items():
             kinds[victim] = _SlotKind.VICTIM
@@ -317,7 +302,6 @@ class _CompanyGenerator:
         return kinds
 
     def _pick_buddy_slots(self) -> dict[Slot, Slot]:
-        """Victim slot -> buddy slot. A buddy shares the victim's shift and terminal."""
         order = list(range(len(self.staff)))
         self.rng.shuffle(order)
         used: set[int] = set()
@@ -370,7 +354,6 @@ class _CompanyGenerator:
         )
         clock = self._clock_source(staff, kind)
         clock_in = self._add_punch(staff, "clock_in", punch.clock_in, clock)
-        # The note explains the manual clock-in; repeating it on the clock-out adds nothing.
         clock_out = self._add_punch(staff, "clock_out", punch.clock_out, replace(clock, note=None))
         if kind is not _SlotKind.VICTIM:
             self._add_access(staff, MAIN_DOOR, "in", punch.clock_in - self._seconds(60, 300))
@@ -422,7 +405,6 @@ class _CompanyGenerator:
         return log_id
 
     def _add_off_shift_accesses(self) -> None:
-        # Saturdays have no shifts and no overnight spill-over, so any visit is off-shift.
         candidates = [(index, day) for index in range(len(self.staff)) for day in self.saturdays]
         for index, day in self.rng.sample(candidates, self.config.off_shift_accesses_per_company):
             staff = self.staff[index]

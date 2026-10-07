@@ -1,8 +1,3 @@
-"""Scores every rule against the seeded anomaly labels and gates on evals/baselines.json.
-
-Run after `make seed`: `make eval`. Exits 1 when a rule scores below its baseline.
-"""
-
 import asyncio
 import json
 import sys
@@ -24,9 +19,7 @@ EVALS_DIR = Path(__file__).resolve().parent
 BASELINES_PATH = EVALS_DIR / "baselines.json"
 REPORT_PATH = EVALS_DIR / "report.md"
 
-# (company, employee, day): a rule hit counts when it names the labelled employee and day.
 Key = tuple[uuid.UUID, uuid.UUID, date]
-# rule id -> metric name -> minimum allowed score
 Baselines = dict[str, dict[str, float]]
 
 
@@ -36,7 +29,6 @@ class Score:
     false_positives: int
     false_negatives: int
 
-    # An empty denominator means nothing could go wrong on that side, so it scores 1.0.
     @property
     def precision(self) -> float:
         found = self.true_positives + self.false_positives

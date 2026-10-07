@@ -1,5 +1,3 @@
-"""Worked hours per employee and day, and the overtime policies to judge them by."""
-
 import uuid
 from datetime import timedelta
 
@@ -9,12 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from app.db.models import OvertimePolicy
 from app.rules.overtime import OvertimeLimits, WorkedDay
 
-# How early a clock-in may come and still belong to the shift after it.
 SHIFT_EARLY_CLOCK_IN = timedelta(hours=2)
 
-# Pairs each clock-in with the next event, when that event is a clock-out. The pair is dated
-# by the shift it falls in (UTC date of the shift start), so night shifts stay one day. A punch
-# outside every shift falls back to its own date. The week is Israeli: Sunday to Saturday.
 _WORKED_DAYS_SQL = text("""
 WITH punches AS (
     SELECT employee_id, event_type, occurred_at,
