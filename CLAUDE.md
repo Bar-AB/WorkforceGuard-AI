@@ -39,6 +39,7 @@ make seed        # load the synthetic demo companies (SEED=42; same seed = same 
 make fmt         # ruff format . && ruff check --fix . && (cd frontend && npm run format)
 make lint        # ruff format --check . && ruff check . && mypy backend mcp_server evals && (cd frontend && npm run lint)
 make test        # pytest && (cd frontend && npm test)
+make e2e-frontend # Playwright smoke, faked API (one-time: cd frontend && npx playwright install chromium)
 make eval        # rule F1/recall vs evals/baselines.json (run make seed first)
 make mcp-user    # set the mcp_server DB password from .env.mcp MCP_DATABASE_URL (after make seed)
 make mcp         # run the MCP server over stdio (reads only .env.mcp: MCP_DATABASE_URL + MCP_COMPANY_ID)

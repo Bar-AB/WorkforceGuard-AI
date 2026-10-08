@@ -38,9 +38,15 @@ async def test_get_employee_of_other_company_returns_404(
     assert response.status_code == 404
 
 
-async def test_get_unknown_employee_returns_404(client: AsyncClient) -> None:
+async def test_get_unknown_employee_returns_404(
+    client: AsyncClient, rollback_conn: AsyncConnection
+) -> None:
+    company_id = await insert_company(rollback_conn)
+    missing_employee_id = uuid.uuid4()
+
     response = await client.get(
-        f"/api/v1/employees/{uuid.uuid4()}", headers={"X-Company-Id": str(uuid.uuid4())}
+        f"/api/v1/employees/{missing_employee_id}", headers={"X-Company-Id": str(company_id)}
     )
 
     assert response.status_code == 404
+    assert response.json() == {"detail": f"Employee {missing_employee_id} not found."}

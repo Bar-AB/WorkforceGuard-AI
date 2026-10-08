@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.db.models import AuditLog, Finding
 from app.db.worked_time import load_overtime_limits, load_worked_days
-from app.errors import ConflictError
+from app.errors import ConflictError, InvalidInputError
 from app.llm.structured import FallbackReason
 from app.rules import overtime
 from app.rules.findings import RuleFinding
@@ -29,6 +29,11 @@ async def _run_overtime(conn: AsyncConnection, company_id: uuid.UUID) -> list[Ru
 
 
 RULES: dict[str, Rule] = {overtime.RULE_ID: Rule(overtime.RULE_VERSION, _run_overtime)}
+
+
+def require_known_rule(rule_id: str) -> None:
+    if rule_id not in RULES:
+        raise InvalidInputError("Unknown rule_id.")
 
 
 class SkippedRule(BaseModel):

@@ -1,10 +1,12 @@
 import base64
 import binascii
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select, tuple_
+from sqlalchemy import ColumnElement, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.db.models import Finding
@@ -12,6 +14,20 @@ from app.errors import InvalidInputError, NotFoundError
 from app.security.tenant import TenantContext
 
 MAX_PAGE_SIZE = 100
+
+Severity = Literal["low", "medium", "high"]
+
+
+@dataclass(frozen=True)
+class FindingFilters:
+    rule_id: str | None = None
+    severity: Severity | None = None
+    occurred_from: date | None = None
+    occurred_to: date | None = None
+
+    def __post_init__(self) -> None:
+        if self.occurred_from and self.occurred_to and self.occurred_from > self.occurred_to:
+            raise InvalidInputError("occurred_from must be on or before occurred_to.")
 
 
 class FindingSummary(BaseModel):
@@ -30,6 +46,9 @@ class FindingSummary(BaseModel):
 
 class FindingDetail(FindingSummary):
     evidence: dict[str, object]
+    explanation: str | None
+    explanation_source: str | None
+    explanation_prompt_version: str | None
 
 
 class FindingsPage(BaseModel):
@@ -51,11 +70,15 @@ _SUMMARY_COLUMNS = (
 
 
 async def list_findings(
-    conn: AsyncConnection, tenant: TenantContext, limit: int, cursor: str | None
+    conn: AsyncConnection,
+    tenant: TenantContext,
+    filters: FindingFilters,
+    limit: int,
+    cursor: str | None,
 ) -> FindingsPage:
     query = (
         select(*_SUMMARY_COLUMNS)
-        .where(Finding.company_id == tenant.company_id)
+        .where(Finding.company_id == tenant.company_id, *_filter_clauses(filters))
         .order_by(Finding.detected_at.desc(), Finding.id.desc())
         .limit(limit + 1)
     )
@@ -75,14 +98,31 @@ async def get_finding(
 ) -> FindingDetail:
     row = (
         await conn.execute(
-            select(*_SUMMARY_COLUMNS, Finding.evidence).where(
-                Finding.company_id == tenant.company_id, Finding.id == finding_id
-            )
+            select(
+                *_SUMMARY_COLUMNS,
+                Finding.evidence,
+                Finding.explanation,
+                Finding.explanation_source,
+                Finding.explanation_prompt_version,
+            ).where(Finding.company_id == tenant.company_id, Finding.id == finding_id)
         )
     ).one_or_none()
     if row is None:
         raise NotFoundError(f"Finding {finding_id} not found.")
     return FindingDetail.model_validate(row)
+
+
+def _filter_clauses(filters: FindingFilters) -> list[ColumnElement[bool]]:
+    clauses: list[ColumnElement[bool]] = []
+    if filters.rule_id is not None:
+        clauses.append(Finding.rule_id == filters.rule_id)
+    if filters.severity is not None:
+        clauses.append(Finding.severity == filters.severity)
+    if filters.occurred_from is not None:
+        clauses.append(Finding.occurred_on >= filters.occurred_from)
+    if filters.occurred_to is not None:
+        clauses.append(Finding.occurred_on <= filters.occurred_to)
+    return clauses
 
 
 def _encode_cursor(detected_at: datetime, finding_id: uuid.UUID) -> str:

@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 TUESDAY_8AM: Final = datetime(2026, 1, 6, 8, tzinfo=UTC)
+DEFAULT_OCCURRED_ON: Final = date(2026, 1, 6)
 
 
 async def insert_company(conn: AsyncConnection) -> uuid.UUID:
@@ -60,6 +61,20 @@ async def mark_finding_explained(
             "explanation_prompt_version = 'explain_finding.v1' WHERE id = :id"
         ),
         {"t": explanation, "id": finding_id},
+    )
+
+
+async def set_finding_facts(
+    conn: AsyncConnection,
+    finding_id: uuid.UUID,
+    *,
+    rule_id: str = "overtime",
+    severity: str = "high",
+    occurred_on: date = DEFAULT_OCCURRED_ON,
+) -> None:
+    await conn.execute(
+        text("UPDATE findings SET rule_id = :r, severity = :s, occurred_on = :o WHERE id = :id"),
+        {"r": rule_id, "s": severity, "o": occurred_on, "id": finding_id},
     )
 
 

@@ -87,7 +87,9 @@ def create_server(settings: McpSettings) -> MCPServer[ServerState]:
     ) -> findings.FindingsPage:
         """Stored findings for this company, newest first. Pass `next_cursor` back as `cursor`."""
         async with _tool_scope(ctx) as (conn, tenant):
-            return await findings.list_findings(conn, tenant, limit, cursor)
+            return await findings.list_findings(
+                conn, tenant, findings.FindingFilters(), limit, cursor
+            )
 
     @server.tool()
     async def get_attendance_events(

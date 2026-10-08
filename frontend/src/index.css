@@ -1,9 +1,170 @@
-:root {
-  font-family: system-ui, sans-serif;
-  color-scheme: light dark;
+@import 'tailwindcss';
+
+@theme {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
+
+  --animate-rise: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
 }
 
-body {
-  margin: 0;
-  padding: 2rem;
+@theme inline {
+  --color-canvas: var(--wg-canvas);
+  --color-surface: var(--wg-surface);
+  --color-surface-muted: var(--wg-surface-muted);
+  --color-line: var(--wg-line);
+  --color-field-line: var(--wg-field-line);
+  --color-ink: var(--wg-ink);
+  --color-ink-muted: var(--wg-ink-muted);
+  --color-accent: var(--wg-accent);
+  --color-accent-soft: var(--wg-accent-soft);
+  --color-accent-ink: var(--wg-accent-ink);
+  --color-low-soft: var(--wg-low-soft);
+  --color-low-ink: var(--wg-low-ink);
+  --color-low-line: var(--wg-low-line);
+  --color-medium-soft: var(--wg-medium-soft);
+  --color-medium-ink: var(--wg-medium-ink);
+  --color-medium-line: var(--wg-medium-line);
+  --color-high-soft: var(--wg-high-soft);
+  --color-high-ink: var(--wg-high-ink);
+  --color-high-line: var(--wg-high-line);
+  --color-neutral-soft: var(--wg-neutral-soft);
+  --color-neutral-ink: var(--wg-neutral-ink);
+  --color-neutral-line: var(--wg-neutral-line);
+  --color-danger-soft: var(--wg-danger-soft);
+  --color-danger-ink: var(--wg-danger-ink);
+  --color-danger-line: var(--wg-danger-line);
+  --color-danger-solid: var(--wg-danger-solid);
+  --color-caution-soft: var(--wg-caution-soft);
+  --color-caution-ink: var(--wg-caution-ink);
+  --color-caution-line: var(--wg-caution-line);
+}
+
+:root {
+  color-scheme: light dark;
+
+  --wg-canvas: #f5f6fb;
+  --wg-surface: #ffffff;
+  --wg-surface-muted: #f8fafc;
+  --wg-line: #e2e8f0;
+  --wg-field-line: #7d879a;
+  --wg-ink: #0f172a;
+  --wg-ink-muted: #526077;
+  --wg-accent: #4f46e5;
+  --wg-accent-soft: #eef2ff;
+  --wg-accent-ink: #4338ca;
+  --wg-low-soft: #e0f2fe;
+  --wg-low-ink: #075985;
+  --wg-low-line: #bae6fd;
+  --wg-medium-soft: #fef3c7;
+  --wg-medium-ink: #92400e;
+  --wg-medium-line: #fde68a;
+  --wg-high-soft: #ffe4e6;
+  --wg-high-ink: #9f1239;
+  --wg-high-line: #fecdd3;
+  --wg-neutral-soft: #f1f5f9;
+  --wg-neutral-ink: #334155;
+  --wg-neutral-line: #e2e8f0;
+  --wg-danger-soft: #fef2f2;
+  --wg-danger-ink: #991b1b;
+  --wg-danger-line: #fecaca;
+  --wg-danger-solid: #b91c1c;
+  --wg-caution-soft: #fffbeb;
+  --wg-caution-ink: #78350f;
+  --wg-caution-line: #fde68a;
+  --wg-skeleton: #e8ecf3;
+  --wg-skeleton-shine: #f6f8fb;
+  --wg-glow: rgb(99 102 241 / 0.16);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --wg-canvas: #0b0f19;
+    --wg-surface: #121826;
+    --wg-surface-muted: #0f1522;
+    --wg-line: #263247;
+    --wg-field-line: #64708a;
+    --wg-ink: #e6eaf2;
+    --wg-ink-muted: #9aa8bd;
+    --wg-accent: #818cf8;
+    --wg-accent-soft: rgb(99 102 241 / 0.16);
+    --wg-accent-ink: #c7d2fe;
+    --wg-low-soft: rgb(56 189 248 / 0.14);
+    --wg-low-ink: #7dd3fc;
+    --wg-low-line: rgb(56 189 248 / 0.3);
+    --wg-medium-soft: rgb(251 191 36 / 0.14);
+    --wg-medium-ink: #fcd34d;
+    --wg-medium-line: rgb(251 191 36 / 0.3);
+    --wg-high-soft: rgb(251 113 133 / 0.14);
+    --wg-high-ink: #fda4af;
+    --wg-high-line: rgb(251 113 133 / 0.3);
+    --wg-neutral-soft: rgb(148 163 184 / 0.14);
+    --wg-neutral-ink: #cbd5e1;
+    --wg-neutral-line: rgb(148 163 184 / 0.25);
+    --wg-danger-soft: rgb(248 113 113 / 0.1);
+    --wg-danger-ink: #fecaca;
+    --wg-danger-line: rgb(248 113 113 / 0.3);
+    --wg-danger-solid: #dc2626;
+    --wg-caution-soft: rgb(251 191 36 / 0.1);
+    --wg-caution-ink: #fde68a;
+    --wg-caution-line: rgb(251 191 36 / 0.3);
+    --wg-skeleton: #1b2333;
+    --wg-skeleton-shine: #252f43;
+    --wg-glow: rgb(99 102 241 / 0.22);
+  }
+}
+
+@utility bg-glow {
+  background-image:
+    radial-gradient(60rem 22rem at 15% -6rem, var(--wg-glow), transparent 70%),
+    radial-gradient(40rem 18rem at 90% -8rem, rgb(168 85 247 / 0.1), transparent 70%);
+}
+
+@utility bg-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--wg-skeleton) 0%,
+    var(--wg-skeleton-shine) 50%,
+    var(--wg-skeleton) 100%
+  );
+  background-size: 200% 100%;
+}
+
+@layer base {
+  body {
+    @apply bg-canvas font-sans text-ink antialiased;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

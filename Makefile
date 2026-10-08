@@ -4,7 +4,7 @@ export PYTHONPATH := backend
 UV_ENV := $(if $(wildcard .env),--env-file .env,)
 LLM_MODEL ?= qwen3:4b
 
-.PHONY: up up-llm llm-pull api down migrate seed mcp-user fmt lint lint-backend lint-frontend test test-backend test-frontend eval eval-judge mcp mcp-inspect
+.PHONY: up up-llm llm-pull api down migrate seed mcp-user fmt lint lint-backend lint-frontend test test-backend test-frontend e2e-frontend eval eval-judge mcp mcp-inspect
 
 up:
 	$(COMPOSE) up -d --wait
@@ -54,6 +54,9 @@ test-backend:
 
 test-frontend:
 	cd frontend && npm test
+
+e2e-frontend:
+	cd frontend && npm run e2e
 
 eval:
 	uv run python -m evals.run_rules

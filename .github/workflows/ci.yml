@@ -96,3 +96,6 @@ jobs:
         working-directory: frontend
       - run: make lint-frontend
       - run: make test-frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: make e2e-frontend
