@@ -9,4 +9,4 @@ from app.security.tenant import TenantContext
 async def require_company(conn: AsyncConnection, tenant: TenantContext) -> None:
     found = await conn.scalar(select(Company.id).where(Company.id == tenant.company_id))
     if found is None:
-        raise NotFoundError(f"Company {tenant.company_id} not found.")
+        raise NotFoundError("Unknown company.")

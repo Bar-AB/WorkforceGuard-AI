@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from app.llm.provider import LLMProvider
 from app.security.tenant import TenantContext
+from app.services import companies
 
 
 async def get_connection(request: Request) -> AsyncIterator[AsyncConnection]:
@@ -15,8 +16,16 @@ async def get_connection(request: Request) -> AsyncIterator[AsyncConnection]:
         yield conn
 
 
-def get_tenant(x_company_id: Annotated[uuid.UUID, Header()]) -> TenantContext:
-    return TenantContext(company_id=x_company_id)
+Connection = Annotated[AsyncConnection, Depends(get_connection, scope="function")]
+
+
+async def get_tenant(
+    x_company_id: Annotated[uuid.UUID, Header()],
+    conn: Connection,
+) -> TenantContext:
+    tenant = TenantContext(company_id=x_company_id)
+    await companies.require_company(conn, tenant)
+    return tenant
 
 
 def get_llm_provider(request: Request) -> LLMProvider:
@@ -29,7 +38,6 @@ def get_explain_limit(request: Request) -> int:
     return limit
 
 
-Connection = Annotated[AsyncConnection, Depends(get_connection, scope="function")]
 Tenant = Annotated[TenantContext, Depends(get_tenant)]
 LLM = Annotated[LLMProvider, Depends(get_llm_provider)]
 ExplainLimit = Annotated[int, Depends(get_explain_limit)]

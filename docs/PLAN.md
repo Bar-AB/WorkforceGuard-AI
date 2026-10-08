@@ -209,6 +209,11 @@ Rules for every slice:
 - `POST /chat` streams tokens and tool-step events via SSE; dashboard chat panel renders them live.
   Scan progress also streamed via SSE.
 - Conversation memory: last N turns + a running summary; recency-weighted retrieval for findings history (stretch goal).
+- Thinking per call: today `OllamaProvider` hard-codes `reasoning_effort: "none"` and `max_tokens` 512 for every call.
+  Make both a per-call choice. Simple lookups, the finding explainer and the judge stay `none`; multi-step chat
+  questions (the router decides) may use `low`/higher with a larger token cap. Keep thinking out of saved text
+  (read `content` only). Natural, human tone comes from the chat prompt (persona, tone, examples), memory, model
+  size and streaming, not from thinking. Keep thinking only where the chat eval shows clearly better answers.
 - Eval set: ~30 Q&A pairs scored for route correctness, tool-call correctness, and judge answer score.
 - **Done when:** streaming works in the UI; eval scores recorded and gated in CI; tests with FakeLLM pass.
 
