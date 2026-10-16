@@ -12,6 +12,9 @@ export default defineConfig({
     command: 'npm run dev -- --port 5174 --strictPort',
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
-    env: { VITE_COMPANY_ID: '00000000-0000-4000-8000-000000000001' },
+    env: {
+      VITE_COMPANY_ID: '00000000-0000-4000-8000-000000000001',
+      VITE_USER_ID: '00000000-0000-4000-8000-0000000000aa',
+    },
   },
 })

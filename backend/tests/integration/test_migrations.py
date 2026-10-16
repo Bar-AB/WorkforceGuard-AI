@@ -7,6 +7,7 @@ from sqlalchemy import CheckConstraint, Connection, inspect
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app.db.checkpoint_tables import is_alembic_managed
 from app.db.models import Base
 from tests.db_helpers import alembic_config
 
@@ -23,6 +24,10 @@ EXPECTED_TABLES = {
     "proposed_corrections",
     "audit_log",
     "anomaly_labels",
+    "checkpoint_migrations",
+    "checkpoints",
+    "checkpoint_blobs",
+    "checkpoint_writes",
 }
 
 
@@ -31,7 +36,9 @@ def _app_tables(sync_conn: Connection) -> set[str]:
 
 
 def _schema_diff(sync_conn: Connection) -> list[object]:
-    context = MigrationContext.configure(sync_conn, opts={"compare_server_default": True})
+    context = MigrationContext.configure(
+        sync_conn, opts={"compare_server_default": True, "include_name": is_alembic_managed}
+    )
     return list(compare_metadata(context, Base.metadata))
 
 

@@ -10,6 +10,7 @@ from tests.factories import (
     insert_company,
     insert_employee,
     insert_finding,
+    insert_shift_fix_case,
     mark_finding_explained,
     set_finding_facts,
 )
@@ -370,3 +371,51 @@ async def test_list_findings_of_unknown_company_returns_404(client: AsyncClient)
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Unknown company."}
+
+
+async def _pending_flags(client: AsyncClient, company_id: uuid.UUID) -> dict[str, bool]:
+    response = await client.get("/api/v1/findings", headers=_as(company_id))
+    assert response.status_code == 200, response.text
+    return {item["id"]: item["has_pending_correction"] for item in response.json()["items"]}
+
+
+async def test_list_findings_flags_the_finding_with_a_pending_fix(
+    client: AsyncClient, rollback_conn: AsyncConnection
+) -> None:
+    case = await insert_shift_fix_case(rollback_conn)
+    without_fix = await insert_finding(rollback_conn, case.company_id, case.employee_id)
+
+    flags = await _pending_flags(client, case.company_id)
+
+    assert flags == {str(case.finding_id): True, str(without_fix): False}
+
+
+@pytest.mark.parametrize("verdict", ["approve", "reject"])
+async def test_list_findings_clears_the_flag_after_a_decision(
+    client: AsyncClient, rollback_conn: AsyncConnection, verdict: str
+) -> None:
+    case = await insert_shift_fix_case(rollback_conn)
+    headers = {**_as(case.company_id), "X-User-Id": str(case.admin_id)}
+    decided = await client.post(
+        f"/api/v1/corrections/{case.correction_id}/{verdict}", headers=headers
+    )
+    assert decided.status_code == 200, decided.text
+
+    flags = await _pending_flags(client, case.company_id)
+
+    assert flags[str(case.finding_id)] is False
+
+
+async def test_list_findings_flag_ignores_other_company_fixes(
+    client: AsyncClient, rollback_conn: AsyncConnection
+) -> None:
+    other = await insert_shift_fix_case(rollback_conn)
+    company_id = await insert_company(rollback_conn)
+    own = await insert_finding(
+        rollback_conn, company_id, await insert_employee(rollback_conn, company_id)
+    )
+
+    flags = await _pending_flags(client, company_id)
+
+    assert flags == {str(own): False}
+    assert str(other.finding_id) not in flags

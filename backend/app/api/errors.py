@@ -3,7 +3,15 @@ from collections.abc import Awaitable, Callable
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from app.errors import ConflictError, DomainError, InvalidInputError, NotFoundError
+from app.errors import (
+    ConflictError,
+    DomainError,
+    ForbiddenError,
+    InvalidInputError,
+    NotFoundError,
+    ServiceUnavailableError,
+    UnauthenticatedError,
+)
 
 ErrorHandler = Callable[[Request, Exception], Awaitable[JSONResponse]]
 
@@ -11,6 +19,9 @@ _STATUS_BY_ERROR: dict[type[DomainError], int] = {
     NotFoundError: status.HTTP_404_NOT_FOUND,
     InvalidInputError: status.HTTP_422_UNPROCESSABLE_CONTENT,
     ConflictError: status.HTTP_409_CONFLICT,
+    UnauthenticatedError: status.HTTP_401_UNAUTHORIZED,
+    ForbiddenError: status.HTTP_403_FORBIDDEN,
+    ServiceUnavailableError: status.HTTP_503_SERVICE_UNAVAILABLE,
 }
 
 

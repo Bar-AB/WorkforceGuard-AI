@@ -1,14 +1,18 @@
 import asyncio
 import uuid
 from pathlib import Path
+from typing import Final
 
 from alembic.config import Config
 from sqlalchemy import make_url, text
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from app.config import Settings
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+LOCK_WAIT_ATTEMPTS: Final = 100
+LOCK_WAIT_POLL_SECONDS: Final = 0.05
 
 SOURCE_TABLES = [
     "companies",
@@ -48,3 +52,19 @@ def create_empty_database() -> str:
 def drop_database(database_url: str) -> None:
     name = make_url(database_url).database
     asyncio.run(_run_admin_sql(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+
+
+async def wait_until_lock_wait(engine: AsyncEngine) -> None:
+    async with engine.connect() as conn:
+        for _ in range(LOCK_WAIT_ATTEMPTS):
+            waiting = await conn.scalar(
+                text(
+                    "SELECT count(*) FROM pg_stat_activity "
+                    "WHERE datname = current_database() AND wait_event_type = 'Lock'"
+                )
+            )
+            if waiting:
+                return
+            await conn.rollback()
+            await asyncio.sleep(LOCK_WAIT_POLL_SECONDS)
+    raise AssertionError("no session ever waited for a lock")

@@ -9,7 +9,7 @@ from langsmith.run_trees import RunTree
 from pydantic import BaseModel, Field, JsonValue, ValidationError
 
 from app.config import LlmSettings
-from app.errors import DomainError
+from app.errors import DomainError, ServiceUnavailableError
 
 
 class ChatMessage(BaseModel):
@@ -30,8 +30,10 @@ class ResponseSchema:
     schema: Mapping[str, JsonValue]
 
 
-class LLMUnavailableError(DomainError):
-    pass
+class LLMUnavailableError(ServiceUnavailableError):
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class LLMMisconfiguredError(LLMUnavailableError):
@@ -114,8 +116,12 @@ def _rejected(response: httpx.Response) -> LLMMisconfiguredError:
     status = response.status_code
     reason = None if response.is_redirect else _server_error_reason(response.content)
     if reason is None:
-        return LLMMisconfiguredError(f"Ollama rejected the request (HTTP {status}).")
-    return LLMMisconfiguredError(f"Ollama rejected the request (HTTP {status}): {reason}")
+        return LLMMisconfiguredError(
+            f"Ollama rejected the request (HTTP {status}).", status_code=status
+        )
+    return LLMMisconfiguredError(
+        f"Ollama rejected the request (HTTP {status}): {reason}", status_code=status
+    )
 
 
 def _raise_for_status(response: httpx.Response) -> None:
@@ -126,7 +132,7 @@ def _raise_for_status(response: httpx.Response) -> None:
         response.is_client_error and status not in _TRANSIENT_CLIENT_STATUSES
     ):
         raise _rejected(response)
-    raise LLMUnavailableError(f"Ollama request failed (HTTP {status}).")
+    raise LLMUnavailableError(f"Ollama request failed (HTTP {status}).", status_code=status)
 
 
 def _parse_completion(body: bytes) -> _ChatCompletion:

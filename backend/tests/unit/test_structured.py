@@ -1,3 +1,4 @@
+import httpx
 import pytest
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -220,3 +221,47 @@ async def test_pydantic_still_enforces_lengths_the_wire_schema_dropped() -> None
 
     assert caught.value.reason == "invalid_output"
     assert len(fake.calls) == 2
+
+
+def _unavailable_from(cause: Exception) -> LLMUnavailableError:
+    error = LLMUnavailableError("Ollama request failed.")
+    error.__cause__ = cause
+    return error
+
+
+@pytest.mark.parametrize(
+    ("replies", "detail"),
+    [
+        (
+            (
+                LLMUnavailableError("down at 10.0.0.7", status_code=503),
+                LLMUnavailableError("down at 10.0.0.7", status_code=503),
+            ),
+            "LLMUnavailableError HTTP 503",
+        ),
+        (
+            (LLMMisconfiguredError("model not found", status_code=404),),
+            "LLMMisconfiguredError HTTP 404",
+        ),
+        (
+            (
+                _unavailable_from(httpx.ConnectError("refused")),
+                _unavailable_from(httpx.ConnectError("refused")),
+            ),
+            "LLMUnavailableError from ConnectError",
+        ),
+        ((RAW_REPLY, RAW_REPLY), "ValidationError"),
+        (
+            (LLMInvalidReplyError("too long"), LLMInvalidReplyError("too long")),
+            "LLMInvalidReplyError",
+        ),
+    ],
+    ids=["http_status", "misconfigured_status", "cause_class", "invalid_json", "invalid_reply"],
+)
+async def test_complete_structured_error_carries_detail_without_provider_text(
+    replies: tuple[str | Exception, ...], detail: str
+) -> None:
+    with pytest.raises(LLMOutputError) as caught:
+        await complete_structured(FakeLLM(*replies), MESSAGES, _Reply)
+
+    assert caught.value.detail == detail

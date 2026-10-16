@@ -10,7 +10,7 @@ from app.services.findings import (
     MAX_PAGE_SIZE,
     FindingDetail,
     FindingFilters,
-    FindingsPage,
+    ReviewFindingsPage,
     Severity,
 )
 
@@ -35,8 +35,8 @@ async def list_findings(
     filters: Annotated[FindingFilters, Depends(finding_filters)],
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = 50,
     cursor: str | None = None,
-) -> FindingsPage:
-    return await findings.list_findings(conn, tenant, filters, limit, cursor)
+) -> ReviewFindingsPage:
+    return await findings.list_review_findings(conn, tenant, filters, limit, cursor)
 
 
 @router.get("/{finding_id}")

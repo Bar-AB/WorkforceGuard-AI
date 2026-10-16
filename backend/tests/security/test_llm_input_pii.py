@@ -1,21 +1,56 @@
+import json
+import re
 import uuid
 from collections.abc import Iterator
-from typing import get_type_hints
+from typing import Final, get_type_hints
 
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tracers.base import BaseTracer
 from langchain_core.tracers.schemas import Run
-from sqlalchemy import select
+from langgraph.checkpoint.memory import InMemorySaver
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.db.models import Finding
+from app.graph.correction_graph import (
+    CorrectionContext,
+    Suggestion,
+    build_correction_graph,
+    suggest_correction,
+)
 from app.graph.scan_graph import SCAN_GRAPH, ScanContext, ScanState, run_scan
 from app.rules.findings import RuleFinding
 from app.security.tenant import TenantContext
 from app.services.explanations import ExplainedFinding
-from tests.factories import insert_company_with_long_day
-from tests.fake_llm import FakeLLM
+from tests.factories import SuggestCase, insert_company_with_long_day, insert_suggest_case
+from tests.fake_llm import TEST_SUGGEST_TIMEOUT_SECONDS, FakeLLM
 
 GRAPH_NODES = {"load", "detect", "persist_findings", "explain", "persist_explanations"}
+UUID_PATTERN: Final = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I
+)
+SUGGEST_NODES: Final = {
+    "load_facts",
+    "check_detected",
+    "propose",
+    "check_resolves",
+    "judge",
+    "store_proposal",
+    "await_decision",
+}
+PERSON_EMAIL: Final = "test.person@example.test"
+DEVICE_ID: Final = "gate-7"
+NOTE: Final = "Left early for the doctor"
+PROPOSER_FIX: Final = json.dumps(
+    {
+        "action": "fix",
+        "target": "row_3",
+        "column": "occurred_at",
+        "value": "2026-01-06T20:00:00+00:00",
+        "reason": "The clock-out is one hour late.",
+    }
+)
+JUDGE_VERDICT: Final = json.dumps({"supported": True, "reason": "Matches the door exit."})
 
 
 class _RunCollector(BaseTracer):
@@ -103,3 +138,73 @@ async def test_scan_graph_traced_runs_carry_no_employee_identity(
         traced = repr(run.inputs) + repr(run.outputs) + repr(run.extra)
         for marker in markers:
             assert marker not in traced, (run.name, marker)
+
+
+async def _suggest_case_with_identity(conn: AsyncConnection) -> SuggestCase:
+    case = await insert_suggest_case(conn)
+    await conn.execute(
+        text("UPDATE employees SET email = :m WHERE id = :id"),
+        {"m": PERSON_EMAIL, "id": case.employee_id},
+    )
+    await conn.execute(
+        text("UPDATE attendance_events SET device_id = :d, note = :n WHERE id = :id"),
+        {"d": DEVICE_ID, "n": NOTE, "id": case.clock_in_id},
+    )
+    return case
+
+
+async def test_suggest_llm_inputs_have_no_ids_or_pii(rollback_conn: AsyncConnection) -> None:
+    case = await _suggest_case_with_identity(rollback_conn)
+    fake = FakeLLM(PROPOSER_FIX)
+    graph = build_correction_graph(InMemorySaver())
+
+    await suggest_correction(
+        graph,
+        rollback_conn,
+        case.tenant,
+        fake,
+        case.finding_id,
+        timeout_seconds=TEST_SUGGEST_TIMEOUT_SECONDS,
+    )
+
+    assert len(fake.calls) >= 2
+    for system, user in fake.calls:
+        sent = system.content + user.content
+        assert UUID_PATTERN.findall(sent) == []
+        assert [m for m in ("Test Person", PERSON_EMAIL, DEVICE_ID, NOTE) if m in sent] == []
+        assert user.content.startswith("<data>\n")
+        assert user.content.endswith("\n</data>")
+
+
+async def test_suggest_traced_runs_carry_no_ids(rollback_conn: AsyncConnection) -> None:
+    case = await _suggest_case_with_identity(rollback_conn)
+    collector = _RunCollector()
+    suggestion = Suggestion(
+        correction_id=uuid.uuid4(),
+        finding_id=case.finding_id,
+        provider=FakeLLM(PROPOSER_FIX, JUDGE_VERDICT),
+    )
+    config: RunnableConfig = {
+        "configurable": {"thread_id": str(suggestion.correction_id)},
+        "callbacks": [collector],
+    }
+
+    await build_correction_graph(InMemorySaver()).ainvoke(
+        {"entry": "suggest"},
+        config,
+        context=CorrectionContext(conn=rollback_conn, tenant=case.tenant, suggestion=suggestion),
+        durability="sync",
+    )
+
+    runs = list(_all_runs(collector.roots))
+    assert {run.name for run in runs} >= SUGGEST_NODES
+    markers = [
+        str(case.finding_id),
+        str(case.shift_id),
+        str(case.clock_out_id),
+        str(case.employee_id),
+        "Test Person",
+    ]
+    for run in runs:
+        traced = repr(run.inputs) + repr(run.outputs) + repr(run.extra)
+        assert [m for m in markers if m in traced] == [], run.name

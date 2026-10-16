@@ -6,6 +6,7 @@ from sqlalchemy import Connection, pool
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.config import Settings
+from app.db.checkpoint_tables import is_alembic_managed
 from app.db.models import Base
 
 config = context.config
@@ -24,13 +25,16 @@ def run_migrations_offline() -> None:
         target_metadata=Base.metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_name=is_alembic_managed,
     )
     with context.begin_transaction():
         context.run_migrations()
 
 
 def _run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=Base.metadata)
+    context.configure(
+        connection=connection, target_metadata=Base.metadata, include_name=is_alembic_managed
+    )
     with context.begin_transaction():
         context.run_migrations()
 

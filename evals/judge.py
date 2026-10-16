@@ -120,7 +120,7 @@ def judge_shortfalls(score: float, baseline: float) -> list[str]:
     return []
 
 
-def _table_cell(text: str) -> str:
+def table_cell(text: str) -> str:
     return " ".join(text.split()).replace("|", "\\|")
 
 
@@ -134,7 +134,7 @@ def render_judge_report(results: Sequence[CaseResult], score: float, problems: l
         "| --- | --- | --- | --- |",
     ]
     lines += [
-        f"| {_table_cell(r.case_id)} | {r.source} | {r.score:.2f} | {_table_cell(r.reason)} |"
+        f"| {table_cell(r.case_id)} | {r.source} | {r.score:.2f} | {table_cell(r.reason)} |"
         for r in results
     ]
     lines.append("")

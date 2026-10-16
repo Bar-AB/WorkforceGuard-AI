@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from app.config import LlmSettings, Settings
+from app.config import ApiSettings, LlmSettings, Settings
 
 ENV_VARS = (
     "DATABASE_URL",
@@ -11,6 +11,7 @@ ENV_VARS = (
     "LLM_MODEL",
     "LLM_TIMEOUT_SECONDS",
     "LLM_EXPLAIN_LIMIT",
+    "LLM_SUGGEST_TIMEOUT_SECONDS",
 )
 
 
@@ -159,3 +160,87 @@ def test_llm_settings_error_hides_refused_url(monkeypatch: pytest.MonkeyPatch) -
         LlmSettings()
 
     assert "S3CRET-MARKER" not in str(caught.value)
+
+
+@pytest.fixture
+def api_env(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@db:5432/x")
+    return monkeypatch
+
+
+def test_api_settings_suggest_timeout_default(api_env: pytest.MonkeyPatch) -> None:
+    assert ApiSettings().llm_suggest_timeout_seconds == 600.0
+
+
+def test_api_settings_read_suggest_timeout_from_env(api_env: pytest.MonkeyPatch) -> None:
+    api_env.setenv("LLM_SUGGEST_TIMEOUT_SECONDS", "550")
+
+    assert ApiSettings().llm_suggest_timeout_seconds == 550.0
+
+
+@pytest.mark.parametrize(
+    ("llm", "suggest"),
+    [
+        ("120", "120"),
+        ("120", "240"),
+        ("120", "480"),
+        ("120", "540"),
+        ("200", "300"),
+        ("600", "1000"),
+        ("600", "2400"),
+        ("600", "2460"),
+    ],
+)
+def test_api_settings_reject_suggest_timeout_not_above_all_llm_attempts(
+    llm: str, suggest: str, api_env: pytest.MonkeyPatch
+) -> None:
+    api_env.setenv("LLM_TIMEOUT_SECONDS", llm)
+    api_env.setenv("LLM_SUGGEST_TIMEOUT_SECONDS", suggest)
+
+    with pytest.raises(ValidationError, match="llm_suggest_timeout_seconds"):
+        ApiSettings()
+
+
+def test_api_settings_accept_suggest_timeout_above_all_llm_attempts(
+    api_env: pytest.MonkeyPatch,
+) -> None:
+    api_env.setenv("LLM_TIMEOUT_SECONDS", "120")
+    api_env.setenv("LLM_SUGGEST_TIMEOUT_SECONDS", "541")
+
+    assert ApiSettings().llm_suggest_timeout_seconds == 541.0
+
+
+def test_api_settings_accept_suggest_timeout_above_all_attempts_at_max_llm_timeout(
+    api_env: pytest.MonkeyPatch,
+) -> None:
+    api_env.setenv("LLM_TIMEOUT_SECONDS", "600")
+    api_env.setenv("LLM_SUGGEST_TIMEOUT_SECONDS", "2461")
+
+    assert ApiSettings().llm_suggest_timeout_seconds == 2461.0
+
+
+def test_api_settings_suggest_timeout_error_names_the_formula(
+    api_env: pytest.MonkeyPatch,
+) -> None:
+    api_env.setenv("LLM_SUGGEST_TIMEOUT_SECONDS", "540")
+
+    with pytest.raises(ValidationError, match=r"2 x 2 x llm_timeout_seconds \+ 60"):
+        ApiSettings()
+
+
+@pytest.mark.parametrize("timeout", ["0", "inf", "nan", "2501"])
+def test_api_settings_reject_unbounded_suggest_timeout(
+    timeout: str, api_env: pytest.MonkeyPatch
+) -> None:
+    api_env.setenv("LLM_SUGGEST_TIMEOUT_SECONDS", timeout)
+
+    with pytest.raises(ValidationError, match="llm_suggest_timeout_seconds"):
+        ApiSettings()
+
+
+def test_judge_and_tool_settings_ignore_suggest_timeout(api_env: pytest.MonkeyPatch) -> None:
+    api_env.setenv("LLM_TIMEOUT_SECONDS", "180")
+    api_env.setenv("LLM_SUGGEST_TIMEOUT_SECONDS", "1")
+
+    assert (LlmSettings().llm_timeout_seconds, Settings().llm_timeout_seconds) == (180.0, 180.0)
+    assert not hasattr(Settings(), "llm_suggest_timeout_seconds")

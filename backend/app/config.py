@@ -1,11 +1,14 @@
-from typing import Final
+from typing import Final, Self
 from urllib.parse import urlsplit
 
 import httpx
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _HTTP_SCHEMES: Final = frozenset({"http", "https"})
+LLM_MAX_ATTEMPTS: Final = 2
+SUGGEST_LLM_CALLS: Final = 2
+SUGGEST_NON_LLM_SECONDS: Final = 60
 
 
 class LlmSettings(BaseSettings):
@@ -31,3 +34,17 @@ class LlmSettings(BaseSettings):
 
 class Settings(LlmSettings):
     database_url: str
+
+
+class ApiSettings(Settings):
+    llm_suggest_timeout_seconds: float = Field(600.0, gt=0, le=2500, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def _suggest_outlasts_all_llm_attempts(self) -> Self:
+        all_attempts = SUGGEST_LLM_CALLS * LLM_MAX_ATTEMPTS * self.llm_timeout_seconds
+        if self.llm_suggest_timeout_seconds <= all_attempts + SUGGEST_NON_LLM_SECONDS:
+            raise ValueError(
+                f"llm_suggest_timeout_seconds must be greater than {SUGGEST_LLM_CALLS} x "
+                f"{LLM_MAX_ATTEMPTS} x llm_timeout_seconds + {SUGGEST_NON_LLM_SECONDS}"
+            )
+        return self

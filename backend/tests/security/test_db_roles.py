@@ -22,6 +22,8 @@ MCP_READABLE_TABLES = [
 
 MCP_HIDDEN_TABLES = ["users", "anomaly_labels", "audit_log"]
 MCP_INSERTABLE_TABLES = ["findings", "proposed_corrections", "audit_log"]
+CHECKPOINT_DATA_TABLES = ["checkpoints", "checkpoint_blobs", "checkpoint_writes"]
+CHECKPOINT_TABLES = ["checkpoint_migrations", *CHECKPOINT_DATA_TABLES]
 
 
 async def _has_privilege(conn: AsyncConnection, role: str, table: str, privilege: str) -> bool:
@@ -168,6 +170,48 @@ async def test_mcp_reader_insert_pending_correction_is_allowed(
     assert result.scalar_one() == "pending"
 
 
+async def test_mcp_reader_can_insert_before_column(rollback_conn: AsyncConnection) -> None:
+    company_id = await insert_company(rollback_conn)
+    employee_id = await insert_employee(rollback_conn, company_id)
+    finding_id = await insert_finding(rollback_conn, company_id, employee_id)
+    await rollback_conn.execute(text("SET LOCAL ROLE mcp_reader"))
+
+    result = await rollback_conn.execute(
+        text(
+            "INSERT INTO proposed_corrections (company_id, finding_id, target_table, "
+            "target_id, patch, reason, proposed_by, before) "
+            "VALUES (:c, :f, 'shifts', gen_random_uuid(), '{}', 'r', 'agent', "
+            "'{\"ends_at\": null}') RETURNING status"
+        ),
+        {"c": company_id, "f": finding_id},
+    )
+
+    assert result.scalar_one() == "pending"
+
+
+@pytest.mark.parametrize(
+    ("column", "value"),
+    [("judge_supported", "true"), ("judge_reason", "'ok'"), ("judged_by", "'judge'")],
+)
+async def test_mcp_reader_cannot_insert_judge_columns(
+    rollback_conn: AsyncConnection, column: str, value: str
+) -> None:
+    company_id = await insert_company(rollback_conn)
+    employee_id = await insert_employee(rollback_conn, company_id)
+    finding_id = await insert_finding(rollback_conn, company_id, employee_id)
+    await rollback_conn.execute(text("SET LOCAL ROLE mcp_reader"))
+
+    with pytest.raises(ProgrammingError, match="permission denied"):
+        await rollback_conn.execute(
+            text(
+                "INSERT INTO proposed_corrections (company_id, finding_id, target_table, "
+                f"target_id, patch, reason, proposed_by, {column}) "
+                f"VALUES (:c, :f, 'shifts', gen_random_uuid(), '{{}}', 'r', 'agent', {value})"
+            ),
+            {"c": company_id, "f": finding_id},
+        )
+
+
 async def test_mcp_reader_insert_audit_log_with_actor_is_denied(
     rollback_conn: AsyncConnection,
 ) -> None:
@@ -236,3 +280,29 @@ async def test_mcp_reader_insert_open_finding_with_dedup_key_is_allowed(
         ),
         {"c": company_id, "e": employee_id},
     )
+
+
+@pytest.mark.parametrize("privilege", ["SELECT", "INSERT", "UPDATE", "DELETE"])
+@pytest.mark.parametrize("table", CHECKPOINT_DATA_TABLES)
+async def test_app_rw_can_write_checkpoint_tables(
+    rollback_conn: AsyncConnection, table: str, privilege: str
+) -> None:
+    assert await _has_privilege(rollback_conn, "app_rw", table, privilege)
+
+
+async def test_app_rw_can_read_checkpoint_migrations(rollback_conn: AsyncConnection) -> None:
+    assert await _has_privilege(rollback_conn, "app_rw", "checkpoint_migrations", "SELECT")
+
+
+@pytest.mark.parametrize("privilege", ["INSERT", "UPDATE", "DELETE", "TRUNCATE"])
+async def test_app_rw_cannot_write_checkpoint_migrations(
+    rollback_conn: AsyncConnection, privilege: str
+) -> None:
+    assert not await _has_privilege(rollback_conn, "app_rw", "checkpoint_migrations", privilege)
+
+
+@pytest.mark.parametrize("table", CHECKPOINT_TABLES)
+async def test_mcp_reader_cannot_read_checkpoint_tables(
+    rollback_conn: AsyncConnection, table: str
+) -> None:
+    assert not await _has_privilege(rollback_conn, "mcp_reader", table, "SELECT")

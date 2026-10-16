@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
@@ -14,6 +15,9 @@ class Prompt:
     @property
     def label(self) -> str:
         return f"{self.name}.v{self.version}"
+
+    def trace_metadata(self, base: Mapping[str, str]) -> dict[str, str]:
+        return {**base, "prompt_name": self.name, "prompt_version": str(self.version)}
 
 
 def load_prompt(name: str, version: int, directory: Path = PROMPTS_DIR) -> Prompt:

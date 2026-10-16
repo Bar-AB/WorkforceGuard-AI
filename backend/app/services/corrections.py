@@ -1,9 +1,10 @@
 import uuid
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from functools import cache
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, NamedTuple
 
 from pydantic import (
     BaseModel,
@@ -13,16 +14,37 @@ from pydantic import (
     TypeAdapter,
     ValidationError,
 )
-from sqlalchemy import Boolean, Column, Date, DateTime, Numeric, String, Table, insert, select
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    Numeric,
+    String,
+    Table,
+    exists,
+    insert,
+    select,
+)
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from app.db.models import ONE_OF, AuditLog, Base, Finding, ProposedCorrection
+from app.db.models import (
+    ONE_OF,
+    ONE_PENDING_CORRECTION_INDEX,
+    AuditLog,
+    Base,
+    Finding,
+    ProposedCorrection,
+)
 from app.errors import ConflictError, InvalidInputError, NotFoundError
 from app.security.tenant import TenantContext
 from app.services.bounds import check_supported_day
 
 MAX_REASON_LENGTH = 2000
 MAX_PATCH_TEXT_LENGTH = 1000
+PENDING_CORRECTION_MESSAGE = "A fix for this finding is already waiting for a decision."
+ROW_CHANGED_MESSAGE = "The row changed while the fix was being checked."
 
 CorrectionTarget = Literal["shifts", "attendance_events", "access_logs", "payroll_runs"]
 PatchText = Annotated[str, StringConstraints(max_length=MAX_PATCH_TEXT_LENGTH)]
@@ -33,6 +55,28 @@ _LOCKED_COLUMNS = frozenset({"id", "company_id", "employee_id"})
 _MAX_UTC_OFFSET = timedelta(hours=14)
 _NUL = chr(0)
 _TIMESTAMP_JSON: TypeAdapter[datetime] = TypeAdapter(datetime)
+_ROW_VALUES_JSON: TypeAdapter[dict[str, object]] = TypeAdapter(dict[str, object])
+
+
+class PendingCorrectionError(ConflictError):
+    pass
+
+
+@dataclass(frozen=True)
+class FixJudgement:
+    supported: bool | None
+    reason: str | None
+    judged_by: str
+
+
+class TargetRef(NamedTuple):
+    table: CorrectionTarget
+    id: uuid.UUID
+
+
+class TargetRow(NamedTuple):
+    employee_id: uuid.UUID
+    values: dict[str, object]
 
 
 class CorrectionProposal(BaseModel):
@@ -73,11 +117,18 @@ _ITEM_COLUMNS = (
 def validate_patch(
     target_table: CorrectionTarget, patch: Mapping[str, PatchValue]
 ) -> dict[str, object]:
-    if not patch:
-        raise InvalidInputError("patch must change at least one column.")
-    table = _table(target_table)
+    table = _patched_table(target_table, patch)
     return {
         key: _normalized_value(_editable_column(table, key), value) for key, value in patch.items()
+    }
+
+
+def update_values(
+    target_table: CorrectionTarget, stored_patch: Mapping[str, object]
+) -> dict[str, object]:
+    table = _patched_table(target_table, stored_patch)
+    return {
+        key: _db_value(_editable_column(table, key), value) for key, value in stored_patch.items()
     }
 
 
@@ -90,33 +141,58 @@ def check_reason(reason: str) -> str:
     return stripped
 
 
-async def propose_correction(
-    conn: AsyncConnection, tenant: TenantContext, proposal: CorrectionProposal, proposed_by: str
+async def propose_correction(  # noqa: PLR0913 - id and judgement are keyword-only graph extras
+    conn: AsyncConnection,
+    tenant: TenantContext,
+    proposal: CorrectionProposal,
+    proposed_by: str,
+    *,
+    correction_id: uuid.UUID | None = None,
+    judgement: FixJudgement | None = None,
+    checked_before: dict[str, object] | None = None,
 ) -> ProposedCorrectionItem:
     patch = validate_patch(proposal.target_table, proposal.patch)
     reason = check_reason(proposal.reason)
-    employee_id = await _correctable_finding_employee(conn, tenant, proposal.finding_id)
-    await _require_target_of_employee(
-        conn, tenant, proposal.target_table, proposal.target_id, employee_id
-    )
-    item = await _insert_correction(
-        conn,
-        {
-            "company_id": tenant.company_id,
-            "finding_id": proposal.finding_id,
-            "target_table": proposal.target_table,
-            "target_id": proposal.target_id,
-            "patch": patch,
-            "reason": reason,
-            "proposed_by": proposed_by,
-        },
-    )
+    employee_id = await require_correctable_finding(conn, tenant, proposal.finding_id)
+    await require_no_pending_correction(conn, tenant, proposal.finding_id)
+    before = await read_target_values(conn, tenant, proposal, employee_id)
+    if checked_before is not None and before != checked_before:
+        raise ConflictError(ROW_CHANGED_MESSAGE)
+    values: dict[str, object] = {
+        "company_id": tenant.company_id,
+        "finding_id": proposal.finding_id,
+        "target_table": proposal.target_table,
+        "target_id": proposal.target_id,
+        "patch": patch,
+        "before": before,
+        "reason": reason,
+        "proposed_by": proposed_by,
+    }
+    if correction_id is not None:
+        values["id"] = correction_id
+    if judgement is not None:
+        values |= _judgement_values(judgement)
+    item = await _insert_correction(conn, values)
     await _audit_proposal(conn, tenant, item)
     return item
 
 
+def _judgement_values(judgement: FixJudgement) -> dict[str, object]:
+    return {
+        "judge_supported": judgement.supported,
+        "judge_reason": judgement.reason,
+        "judged_by": judgement.judged_by,
+    }
+
+
 def _table(target_table: CorrectionTarget) -> Table:
     return Base.metadata.tables[target_table]
+
+
+def _patched_table(target_table: CorrectionTarget, patch: Mapping[str, object]) -> Table:
+    if not patch:
+        raise InvalidInputError("patch must change at least one column.")
+    return _table(target_table)
 
 
 def _editable_column(table: Table, key: str) -> Column[Any]:
@@ -136,6 +212,21 @@ def _normalized_value(column: Column[Any], value: PatchValue) -> object:
     return _typed_value(column, value)
 
 
+def _db_value(column: Column[Any], value: object) -> object:
+    if value is None:
+        return _normalized_value(column, None)
+    if not isinstance(value, str | bool):
+        raise InvalidInputError(f"{column.name} holds a stored value of the wrong type.")
+    column_type = column.type
+    if isinstance(column_type, DateTime):
+        return _parsed_timestamp(column.name, value)
+    if isinstance(column_type, Date):
+        return _parsed_date(column.name, value)
+    if isinstance(column_type, Numeric):
+        return _parsed_amount(column.name, column_type, value)
+    return _typed_value(column, value)
+
+
 def _typed_value(column: Column[Any], value: _Given) -> object:
     column_type = column.type
     if isinstance(column_type, DateTime):
@@ -152,6 +243,11 @@ def _typed_value(column: Column[Any], value: _Given) -> object:
 
 
 def _timestamp(name: str, value: _Given) -> str:
+    normalized: str = _TIMESTAMP_JSON.dump_python(_parsed_timestamp(name, value), mode="json")
+    return normalized
+
+
+def _parsed_timestamp(name: str, value: _Given) -> datetime:
     message = f"{name} must be an ISO-8601 timestamp with a time zone."
     if not isinstance(value, str):
         raise InvalidInputError(message)
@@ -165,11 +261,14 @@ def _timestamp(name: str, value: _Given) -> str:
     if abs(offset) > _MAX_UTC_OFFSET:
         raise InvalidInputError(f"{name} needs a UTC offset within 14 hours.")
     check_supported_day(name, parsed.date())
-    normalized: str = _TIMESTAMP_JSON.dump_python(parsed, mode="json")
-    return normalized
+    return parsed
 
 
 def _calendar_date(name: str, value: _Given) -> str:
+    return _parsed_date(name, value).isoformat()
+
+
+def _parsed_date(name: str, value: _Given) -> date:
     message = f"{name} must be an ISO-8601 date (YYYY-MM-DD)."
     if not isinstance(value, str):
         raise InvalidInputError(message)
@@ -178,7 +277,7 @@ def _calendar_date(name: str, value: _Given) -> str:
     except ValueError as error:
         raise InvalidInputError(message) from error
     check_supported_day(name, parsed)
-    return parsed.isoformat()
+    return parsed
 
 
 @cache
@@ -186,19 +285,28 @@ def _decimal_adapter(precision: int | None, scale: int | None) -> TypeAdapter[De
     return TypeAdapter(Annotated[Decimal, Field(ge=0, max_digits=precision, decimal_places=scale)])
 
 
-def _amount(name: str, column_type: Numeric[Any], value: _Given) -> str:
+def _amount_message(name: str, column_type: Numeric[Any]) -> str:
     whole_digits = (column_type.precision or 0) - (column_type.scale or 0)
-    message = (
+    return (
         f"{name} must be a non-negative number with at most {whole_digits} digits before "
         f"and {column_type.scale} after the decimal point."
     )
+
+
+def _amount(name: str, column_type: Numeric[Any], value: _Given) -> str:
     if isinstance(value, bool) or not isinstance(value, int | float):
-        raise InvalidInputError(message)
+        raise InvalidInputError(_amount_message(name, column_type))
+    return str(_parsed_amount(name, column_type, str(value)))
+
+
+def _parsed_amount(name: str, column_type: Numeric[Any], value: _Given) -> Decimal:
+    if not isinstance(value, str):
+        raise InvalidInputError(_amount_message(name, column_type))
     adapter = _decimal_adapter(column_type.precision, column_type.scale)
     try:
-        return str(adapter.validate_python(Decimal(str(value))))
+        return adapter.validate_python(value)
     except ValidationError as error:
-        raise InvalidInputError(message) from error
+        raise InvalidInputError(_amount_message(name, column_type)) from error
 
 
 def _flag(name: str, value: _Given) -> bool:
@@ -220,7 +328,7 @@ def _text(column: Column[Any], value: _Given) -> str:
     return value
 
 
-async def _correctable_finding_employee(
+async def require_correctable_finding(
     conn: AsyncConnection, tenant: TenantContext, finding_id: uuid.UUID
 ) -> uuid.UUID:
     finding = (
@@ -238,32 +346,81 @@ async def _correctable_finding_employee(
     return employee_id
 
 
-async def _require_target_of_employee(
-    conn: AsyncConnection,
-    tenant: TenantContext,
-    target_table: CorrectionTarget,
-    target_id: uuid.UUID,
-    employee_id: uuid.UUID,
+async def require_no_pending_correction(
+    conn: AsyncConnection, tenant: TenantContext, finding_id: uuid.UUID
 ) -> None:
-    table = _table(target_table)
-    row_employee_id = await conn.scalar(
-        select(table.c.employee_id).where(
-            table.c.company_id == tenant.company_id, table.c.id == target_id
+    pending = await conn.scalar(
+        select(
+            exists().where(
+                ProposedCorrection.company_id == tenant.company_id,
+                ProposedCorrection.finding_id == finding_id,
+                ProposedCorrection.status == "pending",
+            )
         )
     )
-    if row_employee_id is None:
-        raise NotFoundError(f"Row {target_id} not found in {target_table}.")
-    if row_employee_id != employee_id:
+    if pending:
+        raise PendingCorrectionError(PENDING_CORRECTION_MESSAGE)
+
+
+async def read_target_values(
+    conn: AsyncConnection,
+    tenant: TenantContext,
+    proposal: CorrectionProposal,
+    employee_id: uuid.UUID,
+) -> dict[str, object]:
+    target = TargetRef(proposal.target_table, proposal.target_id)
+    row = await read_target_row(conn, tenant, target, proposal.patch)
+    if row is None:
+        raise NotFoundError(f"Row {target.id} not found in {target.table}.")
+    if row.employee_id != employee_id:
         raise InvalidInputError(
-            f"Row {target_id} in {target_table} is not about the finding's employee."
+            f"Row {target.id} in {target.table} is not about the finding's employee."
         )
+    return row.values
+
+
+async def read_target_row(
+    conn: AsyncConnection,
+    tenant: TenantContext,
+    target: TargetRef,
+    columns: Iterable[str],
+    *,
+    lock: bool = False,
+) -> TargetRow | None:
+    table = _table(target.table)
+    patched = [_editable_column(table, name) for name in columns]
+    statement = select(table.c.employee_id, *patched).where(
+        table.c.company_id == tenant.company_id, table.c.id == target.id
+    )
+    if lock:
+        statement = statement.with_for_update(key_share=True)
+    row = (await conn.execute(statement)).one_or_none()
+    if row is None:
+        return None
+    values: dict[str, object] = _ROW_VALUES_JSON.dump_python(
+        {column.name: row._mapping[column] for column in patched}, mode="json"
+    )
+    return TargetRow(row.employee_id, values)
 
 
 async def _insert_correction(
     conn: AsyncConnection, values: dict[str, object]
 ) -> ProposedCorrectionItem:
     inserted = insert(ProposedCorrection).values(values).returning(*_ITEM_COLUMNS)
-    return ProposedCorrectionItem.model_validate((await conn.execute(inserted)).one())
+    try:
+        async with conn.begin_nested():
+            row = (await conn.execute(inserted)).one()
+    except IntegrityError as error:
+        if _violated_constraint(error) == ONE_PENDING_CORRECTION_INDEX:
+            raise PendingCorrectionError(PENDING_CORRECTION_MESSAGE) from None
+        raise
+    return ProposedCorrectionItem.model_validate(row)
+
+
+def _violated_constraint(error: IntegrityError) -> str | None:
+    driver_error = getattr(error.orig, "driver_exception", None)
+    name = getattr(driver_error, "constraint_name", None)
+    return name if isinstance(name, str) else None
 
 
 async def _audit_proposal(

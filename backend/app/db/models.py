@@ -34,6 +34,7 @@ ATTENDANCE_EVENT_TYPES = ("clock_in", "clock_out")
 ATTENDANCE_SOURCES = ("terminal", "mobile", "manual")
 ACCESS_DIRECTIONS = ("in", "out")
 ONE_OF = "one_of"
+ONE_PENDING_CORRECTION_INDEX = "uq_proposed_corrections_one_pending_per_finding"
 
 
 def _in(column: str, values: tuple[str, ...]) -> str:
@@ -234,7 +235,19 @@ class ProposedCorrection(_TenantRow, Base):
             "AND (decided_at IS NULL) = (decided_by_user_id IS NULL)",
             name="decision_matches_status",
         ),
+        CheckConstraint(
+            "(judge_supported IS NULL) = (judge_reason IS NULL) "
+            "AND (judge_supported IS NULL OR judged_by IS NOT NULL)",
+            name="judge_matches_judged_by",
+        ),
         Index(None, "company_id", "status", "created_at"),
+        Index(
+            ONE_PENDING_CORRECTION_INDEX,
+            "company_id",
+            "finding_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
     )
 
     finding_id: Mapped[uuid.UUID]
@@ -247,6 +260,10 @@ class ProposedCorrection(_TenantRow, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     decided_by_user_id: Mapped[uuid.UUID | None]
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    before: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    judge_supported: Mapped[bool | None]
+    judge_reason: Mapped[str | None] = mapped_column(Text)
+    judged_by: Mapped[str | None] = mapped_column(Text)
 
 
 class AuditLog(_TenantRow, Base):
