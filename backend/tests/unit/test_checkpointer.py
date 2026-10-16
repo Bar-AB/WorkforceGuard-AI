@@ -99,8 +99,9 @@ async def _open_unreachable() -> None:
         pass
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="ProactorEventLoop exists only on Windows")
 def test_open_checkpointer_on_proactor_loop_fails_fast() -> None:
+    if sys.platform != "win32":
+        pytest.skip("ProactorEventLoop exists only on Windows")
     with pytest.raises(CheckpointerUnavailableError, match="ProactorEventLoop"):
         asyncio.run(_open_unreachable(), loop_factory=asyncio.ProactorEventLoop)
 
