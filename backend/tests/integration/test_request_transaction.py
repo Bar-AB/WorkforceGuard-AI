@@ -118,6 +118,7 @@ async def test_lifespan_provides_llm_provider_and_limit_from_settings(
     monkeypatch.setenv("DATABASE_URL", committing_database_url)
     monkeypatch.setenv("LLM_MODEL", "qwen3:test")
     monkeypatch.setenv("LLM_EXPLAIN_LIMIT", "3")
+    monkeypatch.setenv("LLM_SUGGEST_TIMEOUT_SECONDS", "550")
     app = create_app()
 
     async with app.router.lifespan_context(app):
@@ -125,3 +126,4 @@ async def test_lifespan_provides_llm_provider_and_limit_from_settings(
         assert isinstance(provider, OllamaProvider)
         assert provider.model == "qwen3:test"
         assert app.state.explain_limit == 3
+        assert app.state.suggest_timeout_seconds == 550.0

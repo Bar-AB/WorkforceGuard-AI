@@ -1,18 +1,20 @@
 import type { ReactNode } from 'react'
-import { AlertIcon, OfflineIcon, WarningIcon } from './icons.tsx'
+import { AlertIcon, OfflineIcon, SparkIcon, WarningIcon } from './icons.tsx'
 
-type CalloutTone = 'danger' | 'caution' | 'offline'
+type CalloutTone = 'danger' | 'caution' | 'offline' | 'info'
 
 const TONE_CLASSES: Record<CalloutTone, string> = {
   danger: 'border-danger-line bg-danger-soft text-danger-ink',
   caution: 'border-caution-line bg-caution-soft text-caution-ink',
   offline: 'border-line bg-surface text-ink-muted',
+  info: 'border-accent/30 bg-accent-soft text-accent-ink',
 }
 
 const TONE_ICONS: Record<CalloutTone, ReactNode> = {
   danger: <AlertIcon className="size-5" />,
   caution: <WarningIcon className="size-5" />,
   offline: <OfflineIcon className="size-5" />,
+  info: <SparkIcon className="size-5" />,
 }
 
 export function Callout({

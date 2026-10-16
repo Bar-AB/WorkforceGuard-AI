@@ -23,6 +23,16 @@ def test_prompt_label_is_name_dot_version() -> None:
     assert Prompt(name="explain_finding", version=1, text="x").label == "explain_finding.v1"
 
 
+def test_prompt_trace_metadata_adds_name_and_version() -> None:
+    prompt = Prompt(name="explain_finding", version=2, text="x")
+
+    assert prompt.trace_metadata({"company_id": "tenant"}) == {
+        "company_id": "tenant",
+        "prompt_name": "explain_finding",
+        "prompt_version": "2",
+    }
+
+
 def test_explain_prompt_file_marks_data_untrusted_and_asks_json() -> None:
     text = load_prompt("explain_finding", 1).text
 

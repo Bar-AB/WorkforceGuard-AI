@@ -1,6 +1,6 @@
 import asyncio
 import secrets
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Final
 
 import pytest
@@ -101,3 +101,9 @@ async def rollback_conn(migrated_engine: AsyncEngine) -> AsyncIterator[AsyncConn
         transaction = await conn.begin()
         yield conn
         await transaction.rollback()
+
+
+def pytest_asyncio_loop_factories(
+    config: pytest.Config, item: pytest.Item
+) -> dict[str, Callable[[], asyncio.AbstractEventLoop]]:
+    return {"selector": asyncio.SelectorEventLoop}

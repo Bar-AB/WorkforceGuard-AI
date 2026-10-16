@@ -1,12 +1,13 @@
 import { Link, useLocation } from 'react-router'
-import { ruleLabel, type FindingSummary } from '../../api/findings.ts'
+import { ruleLabel, type FindingRow } from '../../api/findings.ts'
 import { Card } from '../../components/Card.tsx'
 import { ChevronRightIcon, ListIcon } from '../../components/icons.tsx'
-import { formatDate } from '../../format.ts'
+import { countOf, formatDate } from '../../format.ts'
 import { SeverityBadge, StatusBadge } from './FindingBadges.tsx'
+import { RowSuggest } from './RowSuggest.tsx'
 import { listLocationState } from './listLocation.ts'
 
-const HEADERS = ['Occurred on', 'Type', 'Severity', 'Status', 'Summary']
+const HEADERS = ['Occurred on', 'Type', 'Severity', 'Status', 'Summary', 'Fix']
 
 const STAGGER_MS = 30
 const MAX_STAGGER_STEPS = 10
@@ -16,10 +17,10 @@ function rowDelay(index: number): string {
 }
 
 function findingCount(count: number): string {
-  return count === 1 ? 'Showing 1 finding' : `Showing ${count} findings`
+  return `Showing ${countOf(count, 'finding')}`
 }
 
-export function FindingsTable({ findings }: { findings: FindingSummary[] }) {
+export function FindingsTable({ findings }: { findings: FindingRow[] }) {
   const { search } = useLocation()
   return (
     <Card className="overflow-hidden">
@@ -69,6 +70,9 @@ export function FindingsTable({ findings }: { findings: FindingSummary[] }) {
                     </Link>
                     <ChevronRightIcon className="size-4 shrink-0 text-ink-muted transition group-hover:translate-x-0.5 group-hover:text-accent" />
                   </div>
+                </td>
+                <td className="px-4 py-3">
+                  <RowSuggest finding={finding} />
                 </td>
               </tr>
             ))}

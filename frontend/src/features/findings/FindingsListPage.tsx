@@ -11,6 +11,7 @@ import { Warning } from '../../components/Warning.tsx'
 import { filtersFromSearchParams, isInvertedRange } from './filterParams.ts'
 import { FindingFiltersForm } from './FindingFiltersForm.tsx'
 import { FindingsTable } from './FindingsTable.tsx'
+import { RunScanPanel } from './RunScanPanel.tsx'
 
 export function FindingsListPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -26,6 +27,7 @@ export function FindingsListPage() {
       <PageHeader
         title="Findings"
         description="Anomalies the rules found in attendance, access and payroll data. Open a finding to see its evidence and explanation."
+        action={<RunScanPanel />}
       />
       <FindingFiltersForm filters={filters} onChange={applyFilters} />
       {isInvertedRange(filters) ? (

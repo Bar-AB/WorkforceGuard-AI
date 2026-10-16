@@ -11,6 +11,7 @@ SIX_TOOLS = {
     "list_findings",
     "propose_correction",
 }
+DECISION_WORDS = ("approve", "reject", "decide", "apply")
 
 
 async def test_tools_list_is_exactly_the_six_tools(
@@ -24,3 +25,16 @@ async def test_tools_list_is_exactly_the_six_tools(
 
     assert {tool.name for tool in listing.tools} == SIX_TOOLS
     assert [tool.name for tool in listing.tools if tool.output_schema is None] == []
+
+
+async def test_mcp_server_has_no_decision_tool(
+    mcp_database_url: str, tool_engine: AsyncEngine
+) -> None:
+    async with tool_engine.begin() as setup:
+        company_id = await insert_company(setup)
+
+    async with open_mcp_client(mcp_database_url, company_id) as client:
+        listing = await client.list_tools()
+
+    names = [tool.name for tool in listing.tools]
+    assert [name for name in names if any(word in name for word in DECISION_WORDS)] == []

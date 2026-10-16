@@ -27,8 +27,12 @@ export interface FindingSummary {
   detected_at: string
 }
 
+export interface FindingRow extends FindingSummary {
+  has_pending_correction: boolean
+}
+
 export interface FindingsPage {
-  items: FindingSummary[]
+  items: FindingRow[]
   next_cursor: string | null
 }
 

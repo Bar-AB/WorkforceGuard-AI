@@ -155,7 +155,8 @@ def create_server(settings: McpSettings) -> MCPServer[ServerState]:
         """Propose (never apply) a change to one row of the finding's employee. `patch` maps
         column names to new values: ISO-8601 strings for dates and timestamps (timestamps with a
         time zone), JSON numbers for hours and pay, true/false for flags. Nothing is coerced.
-        A human approves or rejects it later."""
+        A human approves or rejects it later. A finding can have only one proposal waiting for a
+        decision; proposing another while one is pending fails."""
         proposal = corrections.CorrectionProposal(
             finding_id=finding_id,
             target_table=target_table,

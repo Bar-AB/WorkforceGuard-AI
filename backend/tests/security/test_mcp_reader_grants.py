@@ -45,3 +45,10 @@ def test_expected_reader_grants_cover_the_tool_writes() -> None:
     assert Grant("column", "public.findings", "dedup_key", "INSERT") in EXPECTED_READER_GRANTS
     assert Grant("column", "public.audit_log", "id", "SELECT") in EXPECTED_READER_GRANTS
     assert Grant("relation", "public.users", "", "SELECT") not in EXPECTED_READER_GRANTS
+
+
+def test_expected_reader_grants_include_correction_before() -> None:
+    table = "public.proposed_corrections"
+    assert Grant("column", table, "before", "INSERT") in EXPECTED_READER_GRANTS
+    for column in ("judge_supported", "judge_reason", "judged_by"):
+        assert Grant("column", table, column, "INSERT") not in EXPECTED_READER_GRANTS

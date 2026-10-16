@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import ColumnElement, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from app.db.models import Finding
+from app.db.models import Finding, ProposedCorrection
 from app.errors import InvalidInputError, NotFoundError
 from app.security.tenant import TenantContext
 
@@ -56,6 +56,15 @@ class FindingsPage(BaseModel):
     next_cursor: str | None
 
 
+class ReviewFinding(FindingSummary):
+    has_pending_correction: bool
+
+
+class ReviewFindingsPage(BaseModel):
+    items: list[ReviewFinding]
+    next_cursor: str | None
+
+
 _SUMMARY_COLUMNS = (
     Finding.id,
     Finding.employee_id,
@@ -91,6 +100,37 @@ async def list_findings(
     has_more = len(rows) > limit
     next_cursor = _encode_cursor(items[-1].detected_at, items[-1].id) if has_more else None
     return FindingsPage(items=items, next_cursor=next_cursor)
+
+
+async def list_review_findings(
+    conn: AsyncConnection,
+    tenant: TenantContext,
+    filters: FindingFilters,
+    limit: int,
+    cursor: str | None,
+) -> ReviewFindingsPage:
+    page = await list_findings(conn, tenant, filters, limit, cursor)
+    pending = await _with_pending_correction(conn, tenant, [item.id for item in page.items])
+    items = [
+        ReviewFinding(**item.model_dump(), has_pending_correction=item.id in pending)
+        for item in page.items
+    ]
+    return ReviewFindingsPage(items=items, next_cursor=page.next_cursor)
+
+
+async def _with_pending_correction(
+    conn: AsyncConnection, tenant: TenantContext, finding_ids: list[uuid.UUID]
+) -> set[uuid.UUID]:
+    if not finding_ids:
+        return set()
+    rows = await conn.execute(
+        select(ProposedCorrection.finding_id).where(
+            ProposedCorrection.company_id == tenant.company_id,
+            ProposedCorrection.status == "pending",
+            ProposedCorrection.finding_id.in_(finding_ids),
+        )
+    )
+    return set(rows.scalars())
 
 
 async def get_finding(

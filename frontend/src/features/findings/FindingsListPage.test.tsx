@@ -2,11 +2,12 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { onlineManager } from '@tanstack/react-query'
 import { afterEach, describe, expect, it } from 'vitest'
 import { fakeFetch, jsonResponse } from '../../test/fakeFetch.ts'
-import { findingSummary } from '../../test/findingFixtures.ts'
+import { findingRow } from '../../test/findingFixtures.ts'
+import { findStatus } from '../../test/findStatus.ts'
 import { renderRoute } from '../../test/renderRoute.tsx'
 
-const FIRST = findingSummary({ id: '11111111-1111-4111-8111-111111111111', summary: 'First row' })
-const SECOND = findingSummary({ id: '22222222-2222-4222-8222-222222222222', summary: 'Second row' })
+const FIRST = findingRow({ id: '11111111-1111-4111-8111-111111111111', summary: 'First row' })
+const SECOND = findingRow({ id: '22222222-2222-4222-8222-222222222222', summary: 'Second row' })
 
 const RANGE_MESSAGE = 'Occurred from must be on or before Occurred to.'
 
@@ -33,7 +34,7 @@ describe('FindingsListPage', () => {
     const headers = within(table)
       .getAllByRole('columnheader')
       .map((cell) => cell.textContent)
-    expect(headers).toEqual(['Occurred on', 'Type', 'Severity', 'Status', 'Summary'])
+    expect(headers).toEqual(['Occurred on', 'Type', 'Severity', 'Status', 'Summary', 'Fix'])
     const row = within(table).getByRole('row', { name: /First row/ })
     expect(within(row).getByText('Mar 2, 2026')).toHaveAttribute('dateTime', '2026-03-02')
     expect(row).toHaveTextContent('Overtime breach')
@@ -397,7 +398,7 @@ describe('FindingsListPage', () => {
 
     fireEvent.change(screen.getByLabelText('Occurred from'), { target: { value: '0002-10-08' } })
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Updating findings…')
+    expect(await findStatus('Updating findings…')).toBeInTheDocument()
     expect(screen.queryByText('Loading findings…')).not.toBeInTheDocument()
     expect(screen.getByRole('row', { name: /First row/ })).toBeInTheDocument()
   })
@@ -471,7 +472,7 @@ describe('FindingsListPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
 
-    expect(await screen.findByRole('status')).toHaveTextContent('You are offline.')
+    expect(await findStatus('You are offline.')).toBeInTheDocument()
     expect(screen.getByRole('row', { name: /First row/ })).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })

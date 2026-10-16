@@ -82,13 +82,8 @@ def _fallback(facts: FindingFacts, reason: FallbackReason) -> ExplainResult:
 async def explain_finding(
     provider: LLMProvider, facts: FindingFacts, trace_metadata: Mapping[str, str]
 ) -> ExplainResult:
-    metadata = {
-        **trace_metadata,
-        "prompt_name": EXPLAIN_PROMPT.name,
-        "prompt_version": str(EXPLAIN_PROMPT.version),
-    }
     try:
-        with tracing_context(metadata=metadata):
+        with tracing_context(metadata=EXPLAIN_PROMPT.trace_metadata(trace_metadata)):
             reply = await complete_structured(provider, _messages(facts), _Explanation)
     except LLMOutputError as error:
         return _fallback(facts, error.reason)

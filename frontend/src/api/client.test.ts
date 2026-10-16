@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { fakeFetch, jsonResponse } from '../test/fakeFetch.ts'
-import { ApiError, apiGet, isUnknownCompany } from './client.ts'
+import { ApiError, apiGet, apiPost, isUnknownCompany } from './client.ts'
 
 const COMPANY_ID = '3f2b9c1e-8a4d-4e6f-9b2a-1c3d5e7f9a0b'
+const USER_ID = '9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a'
 
 async function rejectionOf(promise: Promise<unknown>): Promise<unknown> {
   try {
@@ -152,5 +153,66 @@ describe('isUnknownCompany', () => {
     expect(isUnknownCompany(new ApiError(404, 'Unknown company.'))).toBe(true)
     expect(isUnknownCompany(new ApiError(404, 'Finding not found.'))).toBe(false)
     expect(isUnknownCompany(new Error('Unknown company.'))).toBe(false)
+  })
+})
+
+describe('apiPost', () => {
+  it('sends company and user headers', async () => {
+    vi.stubEnv('VITE_COMPANY_ID', COMPANY_ID)
+    vi.stubEnv('VITE_USER_ID', USER_ID)
+    const fetchMock = fakeFetch(() => jsonResponse({ ok: true }))
+
+    await expect(apiPost('/api/v1/corrections/c1/approve', { asUser: true })).resolves.toEqual({
+      ok: true,
+    })
+
+    const init = fetchMock.mock.calls[0][1]
+    const headers = new Headers(init?.headers)
+    expect(init?.method).toBe('POST')
+    expect(headers.get('X-Company-Id')).toBe(COMPANY_ID)
+    expect(headers.get('X-User-Id')).toBe(USER_ID)
+  })
+
+  it('omits the user header unless asked', async () => {
+    vi.stubEnv('VITE_USER_ID', USER_ID)
+    const fetchMock = fakeFetch(() => jsonResponse({}))
+
+    await apiPost('/api/v1/findings/f1/corrections')
+
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).has('X-User-Id')).toBe(false)
+  })
+
+  it('throws when user id is required but missing', async () => {
+    vi.stubEnv('VITE_USER_ID', '')
+    const fetchMock = fakeFetch(() => jsonResponse({}))
+
+    await expect(apiPost('/api/v1/corrections/c1/approve', { asUser: true })).rejects.toThrow(
+      'VITE_USER_ID is missing or not a UUID. Set it in frontend/.env.local.',
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('maps error detail', async () => {
+    fakeFetch(() => jsonResponse({ detail: 'Correction is not pending.' }, 409))
+
+    const error = await rejectionOf(apiPost('/api/v1/corrections/c1/approve', { asUser: true }))
+
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error).toMatchObject({ status: 409, message: 'Correction is not pending.' })
+  })
+})
+
+describe('apiPost transport failures', () => {
+  it('says the outcome is unknown when the connection is lost', async () => {
+    const networkError = new TypeError('Failed to fetch')
+    fakeFetch(() => Promise.reject(networkError))
+
+    const error = await rejectionOf(apiPost('/api/v1/findings/f1/corrections'))
+
+    expect(error).toBeInstanceOf(Error)
+    expect(error).toMatchObject({
+      message: 'Lost the connection. Reload to see whether it was saved.',
+      cause: networkError,
+    })
   })
 })

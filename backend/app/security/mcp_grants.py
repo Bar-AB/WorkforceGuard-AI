@@ -33,6 +33,7 @@ MCP_INSERT_COLUMNS: Final = {
         "patch",
         "reason",
         "proposed_by",
+        "before",
     ),
     "audit_log": (
         "company_id",

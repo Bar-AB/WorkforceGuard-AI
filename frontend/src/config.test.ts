@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { readCompanyId } from './config.ts'
+import { readCompanyId, readUserId } from './config.ts'
 
 describe('readCompanyId', () => {
   it('returns the id for a valid UUID', () => {
@@ -24,5 +24,19 @@ describe('readCompanyId', () => {
     vi.stubEnv('VITE_COMPANY_ID', 'acme-corp')
 
     expect(readCompanyId()).toBeNull()
+  })
+})
+
+describe('readUserId', () => {
+  it('returns the id for a valid UUID', () => {
+    vi.stubEnv('VITE_USER_ID', '9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a')
+
+    expect(readUserId()).toBe('9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a')
+  })
+
+  it.each([undefined, '', 'admin'])('returns null for missing or non-UUID value %j', (value) => {
+    vi.stubEnv('VITE_USER_ID', value)
+
+    expect(readUserId()).toBeNull()
   })
 })

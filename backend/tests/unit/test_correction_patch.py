@@ -1,3 +1,6 @@
+from datetime import UTC, date, datetime, timedelta, timezone
+from decimal import Decimal
+
 import pytest
 
 from app.errors import InvalidInputError
@@ -5,6 +8,7 @@ from app.services.corrections import (
     CorrectionTarget,
     PatchValue,
     check_reason,
+    update_values,
     validate_patch,
 )
 
@@ -224,3 +228,69 @@ def test_validate_patch_accepts_supported_year_edges() -> None:
     assert validate_patch(
         "payroll_runs", {"period_start": "1970-01-01", "period_end": "2100-12-31"}
     ) == {"period_start": "1970-01-01", "period_end": "2100-12-31"}
+
+
+@pytest.mark.parametrize(
+    ("table", "patch", "expected"),
+    [
+        (
+            "shifts",
+            {"ends_at": "2026-01-06T17:00:00+02:00"},
+            {"ends_at": datetime(2026, 1, 6, 17, tzinfo=timezone(timedelta(hours=2)))},
+        ),
+        ("payroll_runs", {"period_start": "2026-01-06"}, {"period_start": date(2026, 1, 6)}),
+        ("payroll_runs", {"gross_pay": 1200.5}, {"gross_pay": Decimal("1200.5")}),
+        ("access_logs", {"granted": False}, {"granted": False}),
+        ("attendance_events", {"event_type": "clock_out"}, {"event_type": "clock_out"}),
+        ("attendance_events", {"note": None}, {"note": None}),
+    ],
+)
+def test_update_values_round_trips_normalized_patch(
+    table: CorrectionTarget, patch: dict[str, PatchValue], expected: dict[str, object]
+) -> None:
+    assert update_values(table, validate_patch(table, patch)) == expected
+
+
+def test_update_values_returns_db_types() -> None:
+    values = update_values(
+        "attendance_events", {"occurred_at": "2026-01-06T08:00:00Z", "event_type": "clock_in"}
+    )
+
+    assert values == {
+        "occurred_at": datetime(2026, 1, 6, 8, tzinfo=UTC),
+        "event_type": "clock_in",
+    }
+    assert isinstance(values["occurred_at"], datetime)
+
+
+@pytest.mark.parametrize("key", ["id", "company_id", "employee_id"])
+def test_update_values_refuses_locked_column(key: str) -> None:
+    with pytest.raises(InvalidInputError, match="shifts can be patched"):
+        update_values("shifts", {key: "6f1c1a9e-8f43-4c38-9a59-6f3b1c2d4e5f"})
+
+
+def test_update_values_accepts_normalized_decimal_string() -> None:
+    assert update_values("payroll_runs", {"regular_hours": "7.5", "gross_pay": "0"}) == {
+        "regular_hours": Decimal("7.5"),
+        "gross_pay": Decimal("0"),
+    }
+
+
+@pytest.mark.parametrize(
+    ("patch", "column"),
+    [
+        ({"regular_hours": "-1"}, "regular_hours"),
+        ({"regular_hours": "abc"}, "regular_hours"),
+        ({"regular_hours": 7.5}, "regular_hours"),
+        ({"period_start": "2026-01-06T00:00:00+00:00"}, "period_start"),
+        ({"gross_pay": True}, "gross_pay"),
+    ],
+)
+def test_update_values_refuses_invalid_stored_value(patch: dict[str, object], column: str) -> None:
+    with pytest.raises(InvalidInputError, match=column):
+        update_values("payroll_runs", patch)
+
+
+def test_update_values_refuses_empty_patch() -> None:
+    with pytest.raises(InvalidInputError, match="at least one"):
+        update_values("shifts", {})

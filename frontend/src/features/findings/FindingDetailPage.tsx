@@ -12,6 +12,7 @@ import { NotFoundState } from '../../components/NotFoundState.tsx'
 import { RefreshError } from '../../components/RefreshError.tsx'
 import { ShortId } from '../../components/ShortId.tsx'
 import { formatDate, formatDateTime } from '../../format.ts'
+import { CorrectionsPanel } from '../approvals/CorrectionsPanel.tsx'
 import { EvidenceList } from './EvidenceList.tsx'
 import { ExplanationPanel } from './ExplanationPanel.tsx'
 import { SeverityBadge, StatusBadge } from './FindingBadges.tsx'
@@ -110,6 +111,7 @@ function FindingView({ finding }: { finding: FindingDetail }) {
           </section>
         </Card>
       </div>
+      <CorrectionsPanel finding={finding} />
     </article>
   )
 }

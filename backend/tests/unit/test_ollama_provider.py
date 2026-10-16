@@ -414,3 +414,24 @@ async def test_ollama_provider_accepts_reply_at_max_length() -> None:
 async def test_open_ollama_ignores_proxy_environment() -> None:
     async with open_ollama(LlmSettings(llm_base_url=BASE_URL)) as provider:
         assert provider._client.trust_env is False
+
+
+@pytest.mark.parametrize(
+    ("handler", "status"),
+    [(_http_500, 500), (_http_429, 429), (_http_404, 404), (_http_400, 400), (_redirect, 307)],
+    ids=["http_500", "http_429", "http_404", "http_400", "redirect"],
+)
+async def test_ollama_provider_status_failure_carries_status_code(
+    handler: Handler, status: int
+) -> None:
+    with pytest.raises(LLMUnavailableError) as caught:
+        await _provider(handler).complete(MESSAGES, REPLY_SCHEMA)
+
+    assert caught.value.status_code == status
+
+
+async def test_ollama_provider_transport_failure_has_no_status_code() -> None:
+    with pytest.raises(LLMUnavailableError) as caught:
+        await _provider(_connect_error).complete(MESSAGES, REPLY_SCHEMA)
+
+    assert caught.value.status_code is None

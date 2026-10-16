@@ -25,6 +25,20 @@ async def test_list_findings_tool_returns_only_tenant_findings(
     assert [item.id for item in page.items] == [own_finding]
 
 
+async def test_list_findings_tool_items_have_no_pending_fix_flag(
+    mcp_database_url: str, tool_engine: AsyncEngine
+) -> None:
+    async with tool_engine.begin() as setup:
+        company_id = await insert_company(setup)
+        await insert_finding(setup, company_id, await insert_employee(setup, company_id))
+
+    async with open_mcp_client(mcp_database_url, company_id) as client:
+        result = await client.call_tool("list_findings", {})
+
+    assert result.structured_content is not None
+    assert "has_pending_correction" not in result.structured_content["items"][0]
+
+
 async def test_list_findings_tool_bad_cursor_is_tool_error(
     mcp_database_url: str, tool_engine: AsyncEngine
 ) -> None:

@@ -12,3 +12,15 @@ class InvalidInputError(DomainError):
 
 class ConflictError(DomainError):
     pass
+
+
+class UnauthenticatedError(DomainError):
+    pass
+
+
+class ForbiddenError(DomainError):
+    pass
+
+
+class ServiceUnavailableError(DomainError):
+    pass

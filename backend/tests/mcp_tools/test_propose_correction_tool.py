@@ -2,11 +2,11 @@ import json
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.db.models import AuditLog, Finding, ProposedCorrection
-from app.services.corrections import ProposedCorrectionItem
+from app.services.corrections import PENDING_CORRECTION_MESSAGE, ProposedCorrectionItem
 from tests.factories import insert_company, insert_employee, insert_finding, insert_shift
 from tests.mcp_helpers import open_mcp_client, tool_error_text
 
@@ -48,6 +48,33 @@ async def test_propose_correction_tool_returns_pending_item(
     item = ProposedCorrectionItem.model_validate(result.structured_content)
     assert (item.status, item.proposed_by, item.target_id) == ("pending", "agent:mcp", shift_id)
     assert item.patch == {"ends_at": "2026-01-05T18:00:00+02:00"}
+
+
+async def test_mcp_propose_omits_judge_columns(
+    mcp_database_url: str, tool_engine: AsyncEngine
+) -> None:
+    company_id, finding_id, shift_id = await _commit_company_with_finding_and_shift(tool_engine)
+
+    async with open_mcp_client(mcp_database_url, company_id) as client:
+        result = await client.call_tool(
+            "propose_correction",
+            _arguments(finding_id, shift_id, {"ends_at": "2026-01-05T15:00:00+00:00"}),
+        )
+
+    assert result.structured_content is not None
+    assert "before" not in result.structured_content
+    async with tool_engine.connect() as check:
+        stored = (
+            await check.execute(
+                text(
+                    "SELECT before, judge_supported, judge_reason, judged_by "
+                    "FROM proposed_corrections WHERE company_id = :c"
+                ),
+                {"c": company_id},
+            )
+        ).one()
+    assert stored.before == {"ends_at": "2026-01-05T16:00:00Z"}
+    assert (stored.judge_supported, stored.judge_reason, stored.judged_by) == (None, None, None)
 
 
 async def test_propose_correction_tool_invalid_patch_is_tool_error(
@@ -150,3 +177,21 @@ async def test_propose_correction_tool_nul_in_reason_is_domain_tool_error(
         )
 
     assert "reason must not contain NUL" in tool_error_text(result)
+
+
+async def test_propose_correction_tool_second_pending_is_tool_error(
+    mcp_database_url: str, tool_engine: AsyncEngine
+) -> None:
+    company_id, finding_id, shift_id = await _commit_company_with_finding_and_shift(tool_engine)
+    arguments = _arguments(finding_id, shift_id, {"ends_at": "2026-01-05T15:00:00+00:00"})
+
+    async with open_mcp_client(mcp_database_url, company_id) as client:
+        await client.call_tool("propose_correction", arguments)
+        result = await client.call_tool("propose_correction", arguments)
+
+    assert tool_error_text(result).endswith(f": {PENDING_CORRECTION_MESSAGE}")
+    async with tool_engine.connect() as check:
+        stored = await check.scalars(
+            select(ProposedCorrection.id).where(ProposedCorrection.company_id == company_id)
+        )
+        assert len(stored.all()) == 1

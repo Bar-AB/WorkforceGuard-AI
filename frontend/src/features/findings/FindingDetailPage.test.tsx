@@ -3,7 +3,7 @@ import { onlineManager } from '@tanstack/react-query'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { FindingDetail } from '../../api/findings.ts'
 import { fakeFetch, jsonResponse } from '../../test/fakeFetch.ts'
-import { findingDetail, findingSummary } from '../../test/findingFixtures.ts'
+import { findingDetail, findingRow } from '../../test/findingFixtures.ts'
 import { renderRoute } from '../../test/renderRoute.tsx'
 
 const FINDING = findingDetail()
@@ -17,12 +17,19 @@ function fact(term: string): HTMLElement {
   return value
 }
 
+function isCorrectionsRequest(url: URL): boolean {
+  return url.pathname === `/api/v1/findings/${FINDING.id}/corrections`
+}
+
 function serveDetail(detail: FindingDetail = FINDING) {
-  return fakeFetch((url) =>
-    url.pathname === `/api/v1/findings/${detail.id}`
+  return fakeFetch((url) => {
+    if (isCorrectionsRequest(url)) {
+      return jsonResponse([])
+    }
+    return url.pathname === `/api/v1/findings/${detail.id}`
       ? jsonResponse(detail)
-      : jsonResponse({ items: [], next_cursor: null }),
-  )
+      : jsonResponse({ items: [], next_cursor: null })
+  })
 }
 
 describe('FindingDetailPage', () => {
@@ -35,7 +42,7 @@ describe('FindingDetailPage', () => {
 
     renderRoute(DETAIL_PATH)
 
-    expect(screen.getByRole('status')).toHaveTextContent('Loading finding')
+    expect(screen.getByRole('status', { name: 'Loading finding…' })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: 'Overtime breach' })).toBeInTheDocument()
     expect(screen.getByText('Worked 14h on 2026-03-02')).toBeInTheDocument()
     expect(fact('Severity')).toHaveTextContent('high')
@@ -147,7 +154,10 @@ describe('FindingDetailPage', () => {
 
   it('shows error and retries', async () => {
     let calls = 0
-    fakeFetch(() => {
+    fakeFetch((url) => {
+      if (isCorrectionsRequest(url)) {
+        return jsonResponse([])
+      }
       calls += 1
       return calls === 1
         ? jsonResponse({ detail: 'Database is down.' }, 503)
@@ -159,6 +169,15 @@ describe('FindingDetailPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
 
     expect(await screen.findByRole('heading', { name: 'Overtime breach' })).toBeInTheDocument()
+  })
+
+  it('renders the suggested fixes section', async () => {
+    serveDetail()
+
+    renderRoute(DETAIL_PATH)
+
+    const section = await screen.findByRole('region', { name: 'Suggested fixes' })
+    expect(await within(section).findByText('No fixes suggested yet.')).toBeInTheDocument()
   })
 
   it('back link returns to list', async () => {
@@ -173,7 +192,10 @@ describe('FindingDetailPage', () => {
 
   it('keeps the finding and shows an alert when a background refresh fails', async () => {
     let calls = 0
-    fakeFetch(() => {
+    fakeFetch((url) => {
+      if (isCorrectionsRequest(url)) {
+        return jsonResponse([])
+      }
       calls += 1
       return calls === 2
         ? jsonResponse({ detail: 'Database is down.' }, 503)
@@ -194,11 +216,14 @@ describe('FindingDetailPage', () => {
   })
 
   it('back link keeps the list filters it came from', async () => {
-    fakeFetch((url) =>
-      url.pathname === '/api/v1/findings'
-        ? jsonResponse({ items: [findingSummary({ id: FINDING.id })], next_cursor: null })
-        : jsonResponse(FINDING),
-    )
+    fakeFetch((url) => {
+      if (isCorrectionsRequest(url)) {
+        return jsonResponse([])
+      }
+      return url.pathname === '/api/v1/findings'
+        ? jsonResponse({ items: [findingRow({ id: FINDING.id })], next_cursor: null })
+        : jsonResponse(FINDING)
+    })
     const { router } = renderRoute('/findings?severity=high&occurred_from=2026-03-01')
 
     fireEvent.click(await screen.findByRole('link', { name: FINDING.summary }))
@@ -237,7 +262,7 @@ describe('FindingDetailPage', () => {
   it('says it is offline when a refresh pauses with the finding on screen', async () => {
     serveDetail()
     const { queryClient } = renderRoute(DETAIL_PATH)
-    await screen.findByRole('heading', { name: 'Overtime breach' })
+    await screen.findByText('No fixes suggested yet.')
     act(() => onlineManager.setOnline(false))
 
     act(() => void queryClient.refetchQueries())

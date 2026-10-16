@@ -8,6 +8,7 @@ from app.llm.provider import ChatMessage, LLMResponse, ResponseSchema
 FAKE_EXPLANATION: Final = "Fake explanation."
 FAKE_MODEL: Final = "fake-llm"
 TEST_EXPLAIN_LIMIT: Final = 10
+TEST_SUGGEST_TIMEOUT_SECONDS: Final = 30.0
 
 
 class FakeLLM:
